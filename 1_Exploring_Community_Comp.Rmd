@@ -1,0 +1,89 @@
+---
+title: "Exploring_Community_Comp"
+author: "Isabella Muscettola"
+date: "2023-09-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("phyloseq")
+library("ggplot2")
+
+#import phyloseq object
+ps = readRDS("C:/Users/iemus/Desktop/LAVO22_16S_Library/30042023_MiniMac/ps.initial.samples")
+ps
+```
+
+```{r}
+#look at the OTU table of phyloseq object
+head(otu_table(ps))
+#look at sample data
+head(sample_data(ps))
+#look at taxonomy
+head(tax_table(ps))
+
+# Maybe we're wondering how many sequences are in each sample. We can calculate and plot this:
+
+d = sample_sums(ps)
+# defining variable d as the column sums of our otu table.
+d = data.frame(names(d),d)
+# Creating a dataframe of our sample names
+colnames(d)=c("Sample","Total")
+# Naming the columns
+head(d)
+# displaying the top few values of d.
+
+#five number summary of the total OTUs 
+fivenum(d$Total)
+
+#display distribution of sample totals
+p = qplot(d$Total, geom="histogram", binwidth=60)
+p
+```
+
+```{r}
+#adjust phyloseq object so that only samples with greater than 200 total 
+#sequences are kept
+ps.cutoff = prune_samples(sample_sums(ps)>=200, ps)
+ps.cutoff
+#only removed 1 sample
+
+#see what happens when toggle the minimum number of allowable sequences
+ps.cutoff = prune_samples(sample_sums(ps)>=1000, ps)
+ps.cutoff
+# when the cutoff is 1000 sequences total in a sample, the number of samples drops
+#from 342 to 336 (loss of 6 samples)
+
+#here a cutoff of 200 seems sufficient
+
+```
+
+
+```{r}
+# Let's look at the taxonomic identity of the OTUs in our samples.
+# We can use the plot_bar function from phyloseq, which actually draws on ggplot2.
+plot_bar(ps.cutoff, fill="Phylum")
+#took too long!
+```
+
+```{r}
+ps.norm = transform_sample_counts(ps.cutoff, function(x) x / sum(x) )
+ps.hell = transform_sample_counts(ps.cutoff, function(x) (x / sum(x))^0.5 )
+# And then we can make the same plot
+plot_bar(ps.hell, fill="Phylum")
+```
+
+```{r}
+# Now we can group the bar charts we made above by different categories
+# To do this, we add the facet_grid command to our plot_bar command:
+
+plot_bar(ps.norm, fill="Phylum") + facet_grid(~Trt, scale="free") + geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")
+```
+
+
+
+

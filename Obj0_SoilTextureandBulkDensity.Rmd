@@ -1,0 +1,162 @@
+---
+title: "Obj0_SoilTextureandBulkDensity"
+output: html_document
+date: "2025-09-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Load Libraries and data
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+#latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
+    metadata <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+
+#soil bulk density data
+bulkdensityraw <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/Muscettola_Sites_BulkDensity.csv") 
+#tidytable
+bulkdensityraw <- filter(bulkdensityraw, !is.na(Bag.Number))
+#clean up the Core.ID so it matches the syntax of the metadata
+bulkdensityraw <- bulkdensityraw %>%
+  mutate(Core.ID = str_replace_all(Core.ID, " ", "_")) %>%
+  mutate(Core.ID=ifelse(endsWith(Core.ID, "_"), str_sub(Core.ID, 1, -2), Core.ID))
+  
+
+#dummy check: how many plots had cores taken for bulk density analyses? 
+test <- bulkdensityraw %>%
+  mutate(trt = ifelse(is.na(Code), "LF", "MF")) %>%
+  group_by(Site, trt) %>%
+  summarise(n=n())
+# looks right!
+rm(test)
+```
+
+## Calculate bulk density 
+```{r}
+# calculate bulk density of entire core (including roots and rocks)
+bulkdensity <- bulkdensityraw %>%
+  #mass of total core
+  mutate(totalcoredrymass_g = Mass.of.dry.sample..g...tin - Mass.of.empty.tin..g.) %>%
+  #volume of entire core (pi*3^2*AvgHt)
+  mutate(totalcorevolume_cm3 = pi * 3^2 * Average.Height..cm.) %>%
+  #bulk density of entire core (totaldrymass / totalcorevolume)
+  mutate(totalcorebd_gcm3 = totalcoredrymass_g / totalcorevolume_cm3)
+
+# calculate bulk density of 2mm fraction
+bulkdensity <- bulkdensity %>%
+  #volume of 2mm fraction (totalcorevolume - rocksvolume)
+  mutate(volume2mmfraction_cm3 = totalcorevolume_cm3 - Volume.of.rocks..mL.) %>%
+  #bulk density of 2mm fraction (massof2mmfraction / volumeof2mmfraction)
+  mutate(bdof2mmfraction_gcm3 = Mass.of..2mm.fraction..g./volume2mmfraction_cm3)
+
+# bulk density of 2mm fraction appears lower than it should be (0.40g/cm3 to 1.16g/cm3). Is the diameter correct? IM measured diameter as 2.248in which is 5.71cm
+#test <- bulkdensityraw %>%
+  #mass of total core
+#  mutate(totalcoredrymass_g = #Mass.of.dry.sample..g...tin - #Mass.of.empty.tin..g.) %>%
+  #volume of entire core (pi*3^2*AvgHt)
+#  mutate(totalcorevolume_cm3 = pi * (5.71/2)^2 * Average.Height..cm.) %>%
+  #bulk density of entire core (totaldrymass / totalcorevolume)
+#  mutate(totalcorebd_gcm3 = totalcoredrymass_g / totalcorevolume_cm3) %>%
+  #volume of 2mm fraction (totalcorevolume - rocksvolume)
+#  mutate(volume2mmfraction_cm3 = totalcorevolume_cm3 - Volume.of.rocks..mL.) %>%
+  #bulk density of 2mm fraction (massof2mmfraction / volumeof2mmfraction)
+#  mutate(bdof2mmfraction_gcm3 = Mass.of..2mm.fraction..g./volume2mmfraction_cm3)
+
+#bulk density is still lower than we would expect (0.45g/cm3-1.28g/cm3)
+
+```
+
+#Some quick visualizations
+```{r}
+
+bd_summary <- bulkdensity %>%
+  mutate(trt = ifelse(is.na(Code), "LF", "MF")) %>%
+  group_by(Site, trt) %>%
+  summarise(min=min(bdof2mmfraction_gcm3), median=median(bdof2mmfraction_gcm3), max=max(bdof2mmfraction_gcm3)) 
+
+wholecorebd_summary <- bulkdensity %>%
+  mutate(trt = ifelse(is.na(Code), "LF", "MF")) %>%
+  group_by(Site, trt) %>%
+  summarise(min=min(totalcorebd_gcm3), median=median(totalcorebd_gcm3), max=max(totalcorebd_gcm3))  
+
+a <- ggplot(bulkdensity, aes(Site, bdof2mmfraction_gcm3)) +geom_boxplot()
+a
+
+```
+
+#what are the predicted bulk densities by soil map unit? 
+
+```{r}
+##using the metadata, summarize by map unit
+metadata<-read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+
+df <- metadata %>%
+      filter(startsWith(Run_Submission_Name, "1")) %>%
+      #removes 2nd sequencing run 
+      filter(!endsWith(Run_Submission_Name, "2")) %>% 
+      #removes duplicate samples from sequencing 
+      select(-1, -(3:7), -(15:17), -(23:27))
+      #removes extraneous columns that are related to DNA sequencing
+
+    #set column types 
+    df$Unit <- factor(df$Unit)
+    df$SampleSev <- factor(df$SampleSev, levels = c(1, 2, 3, 4))
+
+soil_mu_summary <- df %>%
+  distinct(Plot_Name, .keep_all = TRUE) %>%
+  group_by(Soil_mu) %>%
+  summarise(n=n())
+
+#soil mu -> bd, one-third bar (bd at water tension of 1/3 bar)
+#100 -> 0.9g/cm3
+#101 -> 1.26g/cm3
+#108 -> 0.9g/cm3
+#168 -> 1.02g/cm3
+#138 & 145 none provided but adjacent range from 0.9-1.26gm/cm3
+#126 -> 0.95g/cm3
+#127 -> 1.00g/cm3
+
+#now let's graph bulk density by map unit
+temp <- bulkdensity %>%
+  left_join(metadata[, c(2, 10:11, 18, 39:45)], by = c("Core.ID" = "Plot_Name")) %>%
+  distinct(Core.ID, .keep_all = TRUE)
+
+temp$Soil_mu <- as.factor(temp$Soil_mu)
+
+b <- ggplot(temp, aes(Soil_mu, bdof2mmfraction_gcm3)) + geom_boxplot()
+b
+
+#is there a negative correlation between volume of rocks and bulk density
+c <- ggplot(temp, aes(bdof2mmfraction_gcm3, Volume.of.rocks..mL./totalcorevolume_cm3*100)) + geom_point(aes(color=factor(Soil_mu))) + geom_smooth(method = "lm", se=TRUE)
+c
+    
+```
+
+
+## ONLY DO ONCE - Add soil texture and bulk density to metadata
+need to fix by calculating bulk density first
+
+```{r}
+    #add C/N concentrations to metadata 
+      
+    newmetadata <- left_join(metadata, CN_tidy[, 2:6], by=c("Full_Sample_Name" = "Sample.Name")) %>%
+      mutate(., Plot_Horizon = paste(Plot_Name, Horizon, sep="_"))
+      #includes a column for both the plot and horizon (this is useful when looking at similarity of soil core characteristics within the same plot)
+    
+    #save metadata 
+    write.csv(newmetadata,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+    rm(temp, CN1, CN2, CN, metadata)
+```
+
+## Primary Explorations: What is the distribution of soil texture across units and treatments
+
+```{r}
+metadata <- read.csv(newmetadata, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+
+```
+
+

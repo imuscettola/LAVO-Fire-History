@@ -1,0 +1,222 @@
+---
+title: "Obj4_radEmu_DA_OTUs"
+output: html_document
+date: "2024-12-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Identifying taxa that are differentially abundant using radEmu
+
+radEmu is an R package for estimating changes in the abundance of microbial taxa using amplicon or shotgun sequencing technologies. Estimates changes in the "absolute abundance" of microbial taxa. Also, formalizes some of the nice things about log-ratio-type methods for differential abundance. Doesn't require priors, log-ratio transformations, nor a reference taxon. Can adjust for relevant covariates. Jointly models all taxa (it's not a taxon-by-taxon model like corncob) which makes it harder to parallelize but testing can be parallelized easily. Can also work on clustered data (accounts for subsampling similar to how a linear mixed model would incorporate it as a random effect).
+
+### Set-up
+
+```{r}
+#install radEmu (if not done already)
+#if (!require("remotes", quietly = TRUE))
+#   install.packages("remotes")
+#
+#remotes::install_github("statdivlab/radEmu")
+
+#install phyloseq (if not done already)
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install(version = "3.18")
+
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+
+#BiocManager::install("phyloseq")
+```
+
+```{r}
+#load radEmu and the tidyverse package suite. 
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(radEmu)
+library(phyloseq)
+```
+
+## Dealing with clustered data
+
+Clustered data can happen from experimental factors or repeated measurements in longitudinal studies. Some people deal with it via random effects. radEmu doesn't want to make strong assumptions (i.e. random effects are normally distributed) so deal with using a GEE framework. If experimental design includes subsampling and your samples are not independent but you don't account for clustering then you will have inflated p-values.
+
+my_clusters is a vector of length n (your number of samples), with observations from the same cluster having the same values
+
+```{r}
+#load phyloseq object 
+##all 3 units, no positive controls, blanks, or duplicated samples 
+ps.3 = readRDS("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/Sequencing/Greengenes2_Taxonomy/ps.3units")
+
+#Make sample severity a factor instead of integer
+sample_data(ps.3)$SampleSev <- as.factor(sample_data(ps.3)$SampleSev)
+
+#clustering is at the plot level, so Plot_Horizon is the cluster name
+sample_data(ps.3)$id <- as.numeric(factor(sample_data(ps.3)$Plot_Horizon))
+
+#CORNCOB specific: clean up taxa names so OTU does not start with a number 
+#ps.3 <- clean_taxa_names(ps.3)
+```
+
+## Subset Phyloseq by Unit & select OTUs with mean abundance \>= 0.0001
+
+```{r}
+#create phyloseq object subset by Unit 
+ps.3.H <- subset_samples(ps.3, Unit =="H")
+
+ps.3.BL <- subset_samples(ps.3, Unit =="BL")
+
+ps.3.WV <- subset_samples(ps.3, Unit =="WV")
+
+rm(ps.3)
+```
+Sanity check - double check the data to make sure it looks right after subsetting
+
+```{r}
+#Hole unit should have 63 samples
+dim(sample_data(ps.3.H)) #63 samples with 50 variables
+unique(sample_data(ps.3.H)$SampleSev) # 4 levels of burn severity 1-4
+dim(otu_table(ps.3.H)) #63 samples with a total of 15715 OTUs
+
+#Butte Lake unit should have 148 samples
+dim(sample_data(ps.3.BL)) #148 samples with 50 variables
+unique(sample_data(ps.3.BL)$SampleSev) # 4 levels of burn severity 1-4
+dim(otu_table(ps.3.BL)) #148 samples with a total of 15715 OTUs
+
+#Butte Lake unit should have 101 samples
+dim(sample_data(ps.3.WV)) #101 samples with 50 variables
+unique(sample_data(ps.3.WV)$SampleSev) # 3 levels of burn severity 2-4
+dim(otu_table(ps.3.WV)) #101 samples with a total of 15715 OTUs
+
+#####How is it possible that all these data sets have exactly the same number of OTUs? Let's check what happens if we subset the sample further so that mean abundance of the OTU > 0
+
+length(taxa_names(filter_taxa(ps.3.H, function(x) mean(x)>0, TRUE))) #8915 taxa instead of 15715
+
+length(taxa_names(filter_taxa(ps.3.BL, function(x) mean(x)>0, TRUE))) #9611 taxa instead of 15715
+
+length(taxa_names(filter_taxa(ps.3.WV, function(x) mean(x)>0, TRUE))) #7658 taxa instead of 15715
+
+```
+
+```{r}
+#subset Unit phyloseq objects so that meanabundance cutoff of taxa >= 0.0001
+
+##Hole 
+###ID taxa present meanAbund\>0.0001 in H 
+ps.norm.H = transform_sample_counts(ps.3.H, function(x) x/sum(x)) 
+H.prune = taxa_names(filter_taxa(ps.norm.H, function(x) mean(x)>=0.0001, TRUE)) 
+length(H.prune) #1414 taxa (compared to 16070 of full dataset and 8915 of Hole subset) 
+
+rm(ps.norm.H)
+
+###prune phyloseq object to include only meanAbund\>0.0001 
+ps.H.prune = prune_taxa(H.prune, ps.3.H) 
+rm(ps.3.H)
+
+##Butte Lake 
+###ID taxa present meanAbund\>0.0001 in BL 
+ps.norm.BL = transform_sample_counts(ps.3.BL, function(x) x/sum(x)) 
+BL.prune = taxa_names(filter_taxa(ps.norm.BL, function(x) mean(x)>=0.0001, TRUE)) 
+length(BL.prune) #929 (compared to 16070 of full dataset and 9611 of Butte Lake subset) 
+rm(ps.norm.BL)
+
+###prune phyloseq object to include only meanAbund>=0.0001 
+ps.BL.prune = prune_taxa(BL.prune, ps.3.BL) 
+rm(ps.3.BL)
+
+##Warner Valley 
+###ID taxa present meanAbund\>0.0001 in WV 
+ps.norm.WV = transform_sample_counts(ps.3.WV, function(x) x/sum(x)) 
+WV.prune = taxa_names(filter_taxa(ps.norm.WV, function(x) mean(x)>=0.0001, TRUE)) 
+length(WV.prune) #913 (compared to 16070 of full dataset and 7658 of WV subset) 
+rm(ps.norm.WV)
+
+###prune phyloseq object to include only meanAbund>=0.0001 
+ps.WV.prune = prune_taxa(WV.prune, ps.3.WV)
+rm(ps.3.WV)
+```
+
+## Make sure the groups are properly ordered
+
+NOTE: This is redundant if the phyloseq object is properly loaded, but doesn't hurt to make sure!
+
+```{r}
+#Order Burn severity so that in Hole and Butte Lake all tests are compared against unburned (1) samples, whereas in Warner Vallley all tests are compared against low (2) samples. 
+##This is because WV has no samples unburned
+sample_data(ps.H.prune)$SampleSev <- factor(sample_data(ps.H.prune)$SampleSev, levels = c("1", "2", "3", "4"))
+sample_data(ps.BL.prune)$SampleSev <- factor(sample_data(ps.BL.prune)$SampleSev, levels = c("1", "2", "3", "4"))
+sample_data(ps.WV.prune)$SampleSev <- factor(sample_data(ps.WV.prune)$SampleSev, levels = c("2", "3", "4"))
+
+#Order Fire History so that all tests are compared against the "Less Fire" group
+sample_data(ps.H.prune)$Trt <- factor(sample_data(ps.H.prune)$Trt, levels = c("LF", "MF"))
+sample_data(ps.BL.prune)$Trt <- factor(sample_data(ps.BL.prune)$Trt, levels = c("LF", "MF"))
+sample_data(ps.WV.prune)$Trt <- factor(sample_data(ps.WV.prune)$Trt, levels = c("LF", "MF"))
+```
+
+
+##Fitting a model
+
+### Hole Unit
+```{r}
+##Hole
+###fit differential abundance model to Hole subset mean abundance >0.0001 OTUs including accounting for subsampling using the cluster variable.
+ef_bs_H <- emuFit(formula = ~ SampleSev,
+                  Y=ps.H.prune,
+                  cluster=sample_data(ps.H.prune)$id)
+
+#visualize results using plot.emuFit
+plot(ef_bs_H)$plots
+
+#save the coefficient table as a csv for later analyses and visualizations
+write.csv(ef_bs_H$coef, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/radEmu/ef_bs_H.csv")
+```
+
+### Butte Lake Unit
+
+```{r}
+##Butte Lake
+###fit differential abundance model to Hole subset mean abundance >0.0001 OTUs including accounting for subsampling using the cluster variable.
+ef_bs_BL <- emuFit(formula = ~ SampleSev,
+                  Y=ps.BL.prune,
+                  cluster=sample_data(ps.BL.prune)$id)
+
+#visualize results using plot.emuFit
+plot(ef_bs_BL)$plots
+
+#save the coefficient table as a csv for later analyses and visualizations
+write.csv(ef_bs_H$coef, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/radEmu/ef_bs_BL.csv")
+```
+
+### Warner Valley Unit
+
+```{r}
+##Warner Valley
+###fit differential abundance model to Hole subset mean abundance >0.0001 OTUs including accounting for subsampling using the cluster variable.
+ef_bs_WV <- emuFit(formula = ~ SampleSev,
+                  Y=ps.WV.prune,
+                  cluster=sample_data(ps.WV.prune)$id)
+
+#visualize results using plot.emuFit
+plot(ef_bs_WV)$plots
+
+#save the coefficient table as a csv for later analyses and visualizations
+write.csv(ef_bs_H$coef, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/radEmu/ef_bs_WV.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

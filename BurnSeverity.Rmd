@@ -1,0 +1,193 @@
+---
+title: "Burn Severity"
+output: html_notebook
+---
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+#######Severity of the soil core itself#########
+#######Without replicates --> use median of each site ######
+library(tidyr)
+soildata <- read.csv("/Users/isabella/Documents/Documents - Isabella’s MacBook Air/MS_Whitman/DataAnalysis/LAVO_BS.csv")
+
+soilburndf <- soildata[!is.na(soildata$O_Depthcm), ] 
+col_order <- c("Treatment", 'Plot', 'Quadrat', 'SampleSev')
+
+soilburndf<- soilburndf %>% 
+  select(Plot, Quadrat, SampleSev) %>%
+  mutate(Treatment=ifelse(grepl('ABCO', Plot) | grepl('PIJE', Plot) | grepl('PICO', Plot), 'FMH', 'nonFMH'))
+
+soilburndf <- soilburndf[, col_order]
+
+soilburndf <- soilburndf %>%
+  mutate(SampleSev=ifelse(SampleSev=='unburn', 1, ifelse(SampleSev=='low', 2, ifelse(SampleSev=='moderate', 3, ifelse(SampleSev=='severe', 4, ''))))) %>% 
+  drop_na() %>%
+  pivot_wider(names_from = 'Quadrat', values_from = 'SampleSev') 
+
+soilburndf<-mutate(rowwise(soilburndf), medSeverity=median(c(A, B, C))) %>%
+  mutate(Unit=ifelse(grepl('BL', Plot), 'ButteLake', ifelse(grepl('H', Plot), 'Hole', 'WarnerValley'))) %>%
+  filter(medSeverity!="")
+ 
+write.csv(soilburndf, "/Users/isabella/Documents/Documents - Isabella’s MacBook Air/MS_Whitman/DataAnalysis/LAVO_MedianBurnSeverity.csv")
+#####wrangled data saved as "LAVO_MedianBurnSeverity"#####
+
+############graph median burn severity########
+soilburndf <- read.csv("/Users/isabella/Documents/Documents - Isabella’s MacBook Air/MS_Whitman/DataAnalysis/LAVO_MedianBurnSeverity.csv")
+graphsoilburn <- soilburndf %>% 
+  group_by(Unit, Treatment) %>%
+  count(medSeverity)%>%
+  ungroup() %>%
+  add_row(Unit='ButteLake', Treatment='nonFMH', medSeverity=1, n=0) %>%
+  add_row(Unit='ButteLake', Treatment='nonFMH', medSeverity=2, n=0) %>%
+  add_row(Unit='ButteLake', Treatment='FMH', medSeverity=4, n=0)
+  
+############bar graph of median burn severities#######
+ggplot(graphsoilburn, aes(medSeverity, n, fill=Treatment)) + geom_col(position=position_dodge(width=1)) + facet_wrap(vars(Unit)) + labs(title='Median Burn Severity across Units by Treatment', x='Site Median Burn Severity', y='Number of Plots')
+
+#############Mann-Whitney U Test##################
+BL <- soilburndf %>%
+  filter(Unit=='ButteLake') 
+H <- filter(soilburndf, Unit=="Hole")
+WV <- filter(soilburndf, Unit=='WarnerValley')
+
+###Two-samples Wilcoxon test#########
+BLres<-wilcox.test(medSeverity~Treatment, data=BL, exact=FALSE)
+BLres$p.value ###BL p-value = 0.000135 --> not significantly different, but lower p value than other two units.
+WVres<-wilcox.test(medSeverity~Treatment, data=WV, exact=FALSE)
+WVres$p.value #####WV p-value=0.457 --> burn sev not significantly different
+Hres<-wilcox.test(medSeverity ~ Treatment, data=H, exact=FALSE)
+Hres$p.value #####0.538
+
+
+```
+
+```{r}
+##########FIRST PASS################### didn't have independent variables, used all replicates of a site. 
+burnseverity <- read.csv("/Users/isabella/Documents/Documents - Isabella’s MacBook Air/MS_Whitman/DataAnalysis/BurnSeverity.csv")
+
+BSttestdf<- read.csv("/Users/isabella/Documents/Documents - Isabella’s MacBook Air/MS_Whitman/DataAnalysis/BurnSeverityttest.csv")
+BLBSttestdf <- filter(BSttestdf, Unit=='ButteLake')
+WVBSttestdf <- filter(BSttestdf, Unit=='Warner Valley')
+HBSttestdf <- filter(BSttestdf, Unit=="Hole")
+
+###### t test############
+#Shapiro-Wilk normality test; null hypothesis data are normally distributed
+with(BLBSttestdf, shapiro.test(severity[Treatment=='FMH']))
+with(BLBSttestdf, shapiro.test(severity[Treatment=='nonFMH']))
+with(WVBSttestdf, shapiro.test(severity[Treatment=='FMH']))
+with(WVBSttestdf, shapiro.test(severity[Treatment=='nonFMH']))
+with(HBSttestdf, shapiro.test(severity[Treatment=='FMH']))
+with(HBSttestdf, shapiro.test(severity[Treatment=='nonFMH']))
+#######all p-values are <0.001 --> data is not normally distributed --> must use two-samples Wilcoxon test
+
+###Two-samples Wilcoxon test#########
+BLres<-wilcox.test(severity~Treatment, data=BLBSttestdf, exact=FALSE)
+BLres$p.value ###BL p-value = 5.837e-10 --> burn severities of FMH & nonFMH plots are significantly different. 
+WVres<-wilcox.test(severity~Treatment, data=WVBSttestdf, exact=FALSE)
+WVres$p.value #####WV p-value=0.5136 --> burn sev not significantly different
+Hres<-wilcox.test(severity ~ Treatment, data=HBSttestdf, exact=FALSE)
+Hres$p.value #####0.3186
+wilcox.test(severity~Treatment, data=BLBSttestdf)
+
+
+```
+
+```{r}
+###########What if we look at median burn severity for the quadrat instead of 
+#the soil core? May be a better proxy for burn severity at a landscape scale####
+
+library(dplyr)
+library(ggplot2)
+
+###wrangling the data; only need to do once then will be saved over##
+quad_soil_data <- read.csv("~/Box/MSWhitman/LAVO_FireHistory/Data/R/LAVO_Quadrat_BurnSeverity.csv")
+quad_soil_data <- quad_soil_data %>% 
+  select(Plot, Quadrat, Full_ID, Severity, SevFrac) %>%
+  mutate(Treatment=ifelse(grepl('ABCO', Plot) | grepl('PIJE', Plot) | grepl('PICO', Plot), 'FMH', 'nonFMH'))
+quad_soil_data <- quad_soil_data[!is.na(quad_soil_data$SevFrac), ] 
+col_order <- c("Treatment", 'Full_ID', 'Plot', 'Quadrat', 'Severity', 'SevFrac')
+quad_soil_data <- quad_soil_data[, col_order]
+
+quad_soil_data <- quad_soil_data %>%
+  mutate(Severity=ifelse(Severity=='unburn', 1, ifelse(Severity=='low', 2, ifelse(Severity=='moderate', 3, ifelse(Severity=='severe', 4, ''))))) %>%
+  mutate(Sevxfraction = Severity*SevFrac)
+
+quad_soil_data$Severity <- as.numeric(quad_soil_data$Severity)
+is.numeric(quad_soil_data$Severity)
+
+####create a new dataframe with median burn severity converted from the existing
+### frequency table#################
+quad_medsev_summary <- quad_soil_data %>%
+  mutate(SevFrac=SevFrac*100) %>%
+  group_by(Plot) %>%
+  summarise(medianSev = median(rep(Severity, SevFrac))) %>% 
+  mutate(Treatment=ifelse(grepl('ABCO', Plot) | grepl('PIJE', Plot) | grepl('PICO', Plot), 'FMH', 'nonFMH')) %>%
+  mutate(Unit=ifelse(grepl('^BL', Plot), "ButteLake", ifelse(grepl('^H', Plot), "Hole", "WarnerValley")))
+write.csv(quad_medsev_summary, file="~/Box/MSWhitman/LAVO_FireHistory/Data/R/BurnSeverity/Quadrat_burnseverity.csv")
+
+############graph median burn severity########
+quad_medsev_summary <- read.csv("~/Box/MSWhitman/LAVO_FireHistory/Data/R/BurnSeverity/Quadrat_burnseverity.csv")
+
+graphquadburn <- quad_medsev_summary %>% 
+  group_by(Unit, Treatment) %>%
+  count(medianSev)%>%
+  ungroup() %>%
+  add_row(Unit='ButteLake', Treatment='nonFMH', medianSev=1, n=0) %>%
+  add_row(Unit='ButteLake', Treatment='nonFMH', medianSev=2, n=0) %>%
+  add_row(Unit='ButteLake', Treatment='FMH', medianSev=4, n=0)
+
+  
+############bar graph of median burn severities#######
+#overall 
+ggplot(graphquadburn, aes(medianSev, n, fill=Treatment)) + geom_col(position=position_dodge(width=1)) + labs(title='Median Burn Severity by Treatment across Units', subtitle="calculated from entire quadrat", x='Site Median Burn Severity', y='Number of Plots') + scale_y_continuous(breaks=c(0, 2, 4, 6, 8, 10)) + scale_fill_discrete(labels = c("more fire", "less fire"))
+
+#facet-wrap by unit
+ggplot(graphquadburn, aes(medianSev, n, fill=Treatment)) + geom_col(position=position_dodge(width=1)) + facet_wrap(vars(Unit)) + labs(title='Median Burn Severity by Treatment across Units', subtitle="calculated from entire quadrat", x='Site Median Burn Severity', y='Number of Plots') + scale_y_continuous(breaks=c(0, 2, 4, 6, 8, 10)) + scale_fill_discrete(labels = c("more fire", "less fire"))
+
+
+
+#############Mann-Whitney U Test##################
+BL2 <-filter(quad_medsev_summary, Unit=='ButteLake') 
+H2 <- filter(quad_medsev_summary, Unit=="Hole")
+WV2 <- filter(quad_medsev_summary, Unit=='WarnerValley')
+
+###Two-samples Wilcoxon test#########
+overallres <- wilcox.test(medianSev~Treatment, data=quad_medsev_summary, exact=FALSE)
+overallres$p.value ###p-value=0.00388 --> burn severity is significantly different across treatments when the data set is not fragmented by site
+
+BL2res<-wilcox.test(medianSev~Treatment, data=BL2, exact=FALSE)
+BL2res$p.value ###BL p-value = 4.77e-05 --> burn sev is significantly different across treatments at Butte Lake
+WV2res<-wilcox.test(medianSev~Treatment, data=WV2, exact=FALSE)
+WV2res$p.value #####WV p-value=0.459 --> burn sev not significantly different
+H2res<-wilcox.test(medianSev ~ Treatment, data=H2, exact=FALSE)
+H2res$p.value #####0.379
+
+```
+
+
+```{r}
+
+
+#may be helpful later
+
+  drop_na() %>%
+  pivot_wider(names_from = 'Quadrat', values_from = 'SampleSev') 
+
+soilburndf<-mutate(rowwise(soilburndf), medSeverity=median(c(A, B, C))) %>%
+  mutate(Unit=ifelse(grepl('BL', Plot), 'ButteLake', ifelse(grepl('H', Plot), 'Hole', 'WarnerValley'))) %>%
+  filter(medSeverity!="")
+ 
+write.csv(soilburndf, "/Users/isabella/Documents/Documents - Isabella’s MacBook Air/MS_Whitman/DataAnalysis/LAVO_MedianBurnSeverity.csv")
+
+
+```
+
+
+
+
+
+

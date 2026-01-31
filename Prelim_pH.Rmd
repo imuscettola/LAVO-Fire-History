@@ -1,0 +1,93 @@
+---
+title: "Prelim_pH"
+author: "Isabella Muscettola"
+date: "2023-04-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r} 
+#2/19/2024 missing 54 samples, want to visualize pH across treatment and horizon
+#to investigate whether there is a treatment effect (more v. less) or burn sev.
+#effect (greater pH with greater burn severity)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+pH <- read.csv("~/Box/MSWhitman/LAVO_FireHistory/Data/R/Int_pH.csv")
+metadata <- read.csv("~/Box/MSWhitman/LAVO_FireHistory/Data/R/02152024_LAVO22_Metadata.csv")
+
+burnsev <- select(metadata, Full_Sample_Name, Overstory_mort, SampleSev, Wt_Avg_QuadBS, mtbs_sev) %>%
+  distinct(., .keep_all = TRUE) 
+
+pH <- pH %>%
+  mutate(Unit=substr(Sample, 1, 2)) %>%
+  mutate(Unit=ifelse(Unit=="H_", "H", Unit)) %>%
+  mutate(Trt=ifelse(Unit=="UB", "unburned", ifelse(nchar(Plot)<=5, "LF", "MF"))) %>%
+  mutate(Horizon=str_sub(Sample, start=-1)) %>%
+  merge(pH, metadata, by.x="Sample", by.y = "Full_Sample_Name")
+
+  
+###### by treatment
+
+O <- ggplot(pH[pH$Horizon=="O" & pH$Unit!="UB", ], aes(x=Trt, y=pH)) + geom_boxplot(aes(color=Trt)) + facet_wrap(~Unit) + labs(title="O Horizon pH")
+
+M <- ggplot(pH[pH$Horizon=="M" & pH$Unit!="UB", ], aes(x=Trt, y=pH)) + geom_boxplot(aes(color=Trt)) + facet_wrap(~Unit) + labs(title="M Horizon pH")
+
+O + M
+
+######### by burn severity
+
+O.bs <- ggplot(pH[pH$Horizon=="O" & pH$Unit!="UB", ], aes(x=SampleSev.y, y=pH.x)) + geom_point() + facet_wrap(~Unit) 
+
+O.bs
+
+```
+
+
+
+```{r}
+Prelim_pH <- read.csv("~/Box/muscettola/Undergrads/pH_Test_Data_R.csv", header=T)
+
+Prelim_pH$Sample <- as.factor(Prelim_pH$Sample)
+Prelim_pH$Method <- as.factor(Prelim_pH$Method)
+
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+
+Prelim_pH_long <- read.csv("~/Box/muscettola/Undergrads/pH_Test_Data_long_R.csv", header=T)
+```
+
+```{r}
+
+Prelim_pH_long$Sample <- as.factor(Prelim_pH_long$Sample)
+Prelim_pH_long$Method <- as.factor(Prelim_pH_long$Method)
+Prelim_pH_long$pH_Time <- as.factor(Prelim_pH_long$pH_Time)
+Prelim_pH_long$pH_Time_from_Soln <- as.numeric(Prelim_pH_long$pH_Time_from_Soln)
+
+PS_Data <- filter(Prelim_pH_long, Method=="PS")
+
+
+ggplot(data=Prelim_pH_long, aes(x=pH_Time, y=pH)) + geom_dotplot(binaxis = "y", stackdir = "center", binwidth = 0.2, aes(fill=Method)) + facet_wrap(facets="Sample")
+
+ggplot(data=Prelim_pH_long, aes(x=pH_Time_from_Soln, y=pH)) + geom_point(aes(colour=factor(Method))) + facet_wrap(facets="Sample") 
+
+ggplot(data=Prelim_pH_long, aes(x=pH_Time_from_Soln, y=pH)) + geom_dotplot(binaxis = "y", stackdir = "center", binwidth = 0.2, aes(fill=Method)) + facet_wrap(facets="Sample") 
+
+model <- lm(pH~Method+Unit+pH_Time_from_Soln, Prelim_pH_long)
+
+anova(model)
+
+
+library(agricolae)
+
+df1<-df.residual(model)
+MSerror1<-deviance(model)
+
+
+out<-HSD.test(aov, trt="Method", group=True, MSerror=MSerror1, df=df1)
+```

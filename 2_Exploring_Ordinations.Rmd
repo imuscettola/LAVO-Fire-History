@@ -1,0 +1,75 @@
+---
+title: "Ordination_Tutorial_LAVO"
+author: "Isabella Muscettola"
+date: "2023-09-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Next, load the packages you need (just phyloseq this week)
+library("phyloseq")
+
+# You will want to import the .biom file, as a phyloseq object,
+# just like we did last week.
+ps = readRDS("C:/Users/iemus/Desktop/LAVO22_16S_Library/30042023_MiniMac/ps.initial.samples")
+ps
+
+
+# And let's remove the really low-abundance samples again
+ps.cutoff = prune_samples(sample_sums(ps)>=200, ps)
+ps.cutoff
+
+# We will also want to transform the sample counts again
+# to relative abundances, like last week.
+ps.norm = transform_sample_counts(ps.cutoff, function(x) x / sum(x) )
+ps.hell = transform_sample_counts(ps.cutoff, function(x) (x / sum(x))^0.5 )
+
+```
+
+```{r}
+?ordinate()
+
+# From scanning the help file, can you see what variables need to be included?
+# Create an ordination below
+
+PCoAOrd = ordinate(physeq=ps.norm, method="PCoA", distance="bray")
+
+# Phyloseq also has a function that plots ordination, called plot_ordination()
+# Call the help file for this function:
+
+?plot_ordination()
+
+#plot PCoA ordination
+plot_ordination(ps.norm, PCoAOrd, color="Trt", shape="Horizon")
+
+#NMDS ordination of normalized phyloseq object
+NMDSOrd = ordinate(physeq=ps.norm, method="NMDS", distance="bray", trymax=1000)
+plot_ordination(ps.norm, NMDSOrd, color="Trt", shape="Horizon")
+```
+
+
+
+```{r}
+# plot using UniFrac distances instead of Bray
+PCoAOrd_UniFrac = ordinate(physeq=ps.norm, method="PCoA", distance="")
+
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+

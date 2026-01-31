@@ -1,0 +1,372 @@
+---
+title: "Obj4_radEmu_DA_OTUs"
+output: html_document
+date: "2024-12-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Identifying taxa that are differentially abundant using radEmu
+
+radEmu is an R package for estimating changes in the abundance of microbial taxa using amplicon or shotgun sequencing technologies. Estimates changes in the "absolute abundance" of microbial taxa. Also, formalizes some of the nice things about log-ratio-type methods for differential abundance. Doesn't require priors, log-ratio transformations, nor a reference taxon. Can adjust for relevant covariates. Jointly models all taxa (it's not a taxon-by-taxon model like corncob) which makes it harder to parallelize but testing can be parallelized easily. Can also work on clustered data (accounts for subsampling similar to how a linear mixed model would incorporate it as a random effect).
+
+### Set-up
+
+```{r}
+#install radEmu (if not done already)
+#if (!require("remotes", quietly = TRUE))
+#   install.packages("remotes")
+#
+#remotes::install_github("statdivlab/radEmu")
+
+#install phyloseq (if not done already)
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install(version = "3.18")
+
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+
+#BiocManager::install("phyloseq")
+```
+
+```{r}
+#load radEmu and the tidyverse package suite. 
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(radEmu)
+library(phyloseq)
+```
+
+## Dealing with clustered data
+
+Clustered data can happen from experimental factors or repeated measurements in longitudinal studies. Some people deal with it via random effects. radEmu doesn't want to make strong assumptions (i.e. random effects are normally distributed) so deal with using a GEE framework. If experimental design includes subsampling and your samples are not independent but you don't account for clustering then you will have inflated p-values.
+
+my_clusters is a vector of length n (your number of samples), with observations from the same cluster having the same values
+
+```{r}
+#load phyloseq object 
+##all 3 units, no positive controls, blanks, or duplicated samples 
+#ps.3 = readRDS("\~/Box/MSWhitman/LAVO_FireHistory/Data/Sequencing/Greengenes2_Taxonomy/ps.3units") 
+ps.3 = readRDS("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/Sequencing/Greengenes2_Taxonomy/ps.3units")
+
+#Make sample severity a factor instead of integer
+sample_data(ps.3)$SampleSev <- as.factor(sample_data(ps.3)$SampleSev)
+
+#clustering is at the plot level, so Plot_Horizon is the cluster name
+sample_data(ps.3)$id <- as.numeric(factor(sample_data(ps.3)$Plot_Horizon))
+
+#CORNCOB specific: clean up taxa names so OTU does not start with a number 
+#ps.3 <- clean_taxa_names(ps.3)
+```
+
+## Subset Phyloseq by Unit & select OTUs with mean abundance \>= 0.005
+
+It is extremely time consuming to run radEmu on even the smallest unit (Hole) when selecting for OTUs with mean abundance >= 0.0001 on a laptop. In order to test whether accounting for subsampling on radEmu works, we use an even smaller subset of OTUs in the Hole unit to see if the output is believable. Then, we will try running this test on all units, selecting only for OTUs with mean abundance >= 0.0001 on a more powerful computer. 
+
+Edit - Hole with OTUs of mean abundance >=0.001 had 145 OTUs, requiring 435 tests at 40seconds per 10 tests. This would have taken 4.8hrs to complete.
+
+```{r}
+#create phyloseq object subset by Unit 
+ps.3.H <- subset_samples(ps.3, Unit =="H")
+
+#subset Unit phyloseq objects so that meanabundance cutoff of taxa >= 0.005
+
+##Hole 
+###ID taxa present meanAbund\>0.001 in H 
+ps.norm.H = transform_sample_counts(ps.3.H, function(x) x/sum(x)) 
+H.prune = taxa_names(filter_taxa(ps.norm.H, function(x) mean(x)>=0.005, TRUE)) 
+length(H.prune) #17 taxa (compared to 16070 of full dataset) 
+rm(ps.norm.H)
+
+###prune phyloseq object to include only meanAbund\>0.005 
+ps.H.prune = prune_taxa(H.prune, ps.3.H) 
+rm(ps.3.H)
+```
+##Fitting a model
+
+Note Hole unit with OTUs mean abundance >= 0.005 selected for 17 OTUs, requiring 51 tests averaging 25 seconds for 10 tests. 
+
+
+```{r}
+##Hole
+###fit differential abundance model to Hole subset mean abundance >0.001 OTUs including accounting for subsampling using the cluster variable.
+ef_bs_H <- emuFit(formula = ~ SampleSev,
+                  Y=ps.H.prune,
+                  cluster=sample_data(ps.H.prune)$id, 
+                  verbose = TRUE)
+#results in 51 tests averaging 25 seconds for 10 tests.
+
+#visualize results using plot.emuFit
+plot(ef_bs_H)$plots
+
+ef_bs_H
+
+#view the dataframe of the resulting test
+dataframe1 <- ef_bs_H$coef
+
+#now let's count the number of tests that have pval < 0.01
+
+sig_ef_bs_H <- filter(dataframe1, pval<0.01)
+length(sig_ef_bs_H$covariate)
+#only 1 test is significant. SampleSev 1:SampleSev 3 of 
+
+ef_bs_H$coef$category
+
+```
+
+What happens if you don't account for clustering in the test? 
+
+```{r}
+
+ef_bs_H_noclustering <- emuFit(formula = ~ SampleSev,
+                  Y=ps.H.prune, 
+                  verbose = TRUE)
+#still 51 tests still averaging 25 seconds for 10 tests. 
+
+#visualize results using plot.emuFit
+plot(ef_bs_H_noclustering)$plots
+
+sig_ef_bs_H_nocluster <- filter(ef_bs_H_noclustering$coef, pval<0.01)
+
+length(sig_ef_bs_H_nocluster$covariate)
+# 5 tests are significant including the 1 significant test from clustering, which had a lower p-value. This  shows that when you treat clustered samples as independent, you'll have anti-conservative inference (inflated p-values)
+
+```
+
+##Test with Butte Lake
+Now let's try with Butte Lake data
+
+```{r}
+#create phyloseq object subset by Unit 
+ps.3.BL <- subset_samples(ps.3, Unit =="BL")
+length(taxa_names(ps.3.BL)) #15715 taxa
+
+#subset Unit phyloseq objects so that meanabundance cutoff of taxa >= 0.005
+
+###ID taxa present meanAbund >= 0.005 in BL 
+ps.norm.BL = transform_sample_counts(ps.3.BL, function(x) x/sum(x)) 
+BL.prune = taxa_names(filter_taxa(ps.norm.BL, function(x) mean(x)>=0.005, TRUE)) 
+length(BL.prune) #25 taxa (compared to 15715 of full dataset) 
+rm(ps.norm.BL)
+#note if mean abundance >= 0.001 134 taxa are selected
+
+###prune phyloseq object to include only meanAbund\>0.005 
+ps.BL.prune = prune_taxa(BL.prune, ps.3.BL) 
+
+
+# Fit a model
+
+###fit differential abundance model to BL subset mean abundance >0.001 OTUs including accounting for subsampling using the cluster variable.
+ef_bs_BL <- emuFit(formula = ~ SampleSev,
+                  Y=ps.BL.prune,
+                  cluster=sample_data(ps.BL.prune)$id, 
+                  verbose = TRUE)
+#results in 75 tests.
+
+#view the dataframe of the resulting test
+dataframe3 <- ef_bs_BL$coef
+
+#now let's count the number of tests that have pval < 0.01
+
+sig_ef_bs_BL <- filter(dataframe3, pval<0.01)
+
+length(sig_ef_bs_BL$covariate)
+#0 tests are significant.
+
+
+###fit differential abundance model to BL subset mean abundance >0.001 OTUs without clustering.
+ef_bs_BL_nocluster <- emuFit(formula = ~ SampleSev,
+                  Y=ps.BL.prune, 
+                  verbose = TRUE)
+#results in 75 tests.
+
+#view the dataframe of the resulting test
+dataframe4 <- ef_bs_BL_nocluster$coef
+
+#now let's count the number of tests that have pval < 0.01
+
+sig_ef_bs_BL_nocluster <- filter(dataframe4, pval<0.01)
+
+length(sig_ef_bs_BL_nocluster$covariate)
+#7 tests are significant.
+
+```
+
+What happens if you don't account for clustering in the test? 
+
+```{r}
+
+ef_bs_H_noclustering <- emuFit(formula = ~ SampleSev,
+                  Y=ps.H.prune, 
+                  verbose = TRUE)
+#still 51 tests still averaging 25 seconds for 10 tests. 
+
+#visualize results using plot.emuFit
+plot(ef_bs_H_noclustering)$plots
+
+sig_ef_bs_H_nocluster <- filter(ef_bs_H_noclustering$coef, pval<0.01)
+
+length(sig_ef_bs_H_nocluster)
+# 9 tests are significant including the 1 significant test from clustering, which had a lower p-value. This  shows that when you treat clustered samples as independent, you'll have anti-conservative inference (inflated p-values)
+
+```
+
+## What if we include covariates?
+
+In the final models looking at community composition, we have considered including pH as a covariate as it is a variable that was consistently statistically significant in all Units and Horizons. We have also subset by horizon to ensure we are comparing Organic to organic samples and mineral to mineral samples. Let's investigate the outputs of these models here to see if we get different results. 
+
+### Subset by Horizon
+```{r}
+#subset by Horizon
+##organic horizon
+ps.H.prune.O <- subset_samples(ps.H.prune, Horizon =="O")
+###sanity check how many samples do we have and how many OTUs
+dim(otu_table(ps.H.prune.O)) # 22 samples with a total of 17 OTUs
+dim(otu_table(ps.H.prune)) # 63 samples with a total of 17 OTUs
+
+#fit a model
+ef_bs_H_O <- emuFit(formula = ~ SampleSev,
+                  Y=ps.H.prune.O,
+                  cluster=sample_data(ps.H.prune.O)$id, 
+                  verbose = TRUE)
+###51 tests and they take longer
+######## 8 tests needed to be retried (tests 18, 22, 36, 37, 38, 39, 41, & 46) with the following warning:Constrained optimization failed to converge within iteration limit; retrying with smaller penalty scaling parameter tau and larger inner_maxit. Constrained optimization failed to converge within iteration limit; retrying with smaller penalty scaling parameter tau and larger inner_maxit. 
+
+#visualize results using plot.emuFit
+plot(ef_bs_H_O)$plots
+
+sig_ef_bs_H_O <- filter(ef_bs_H_O$coef, pval<0.01)
+
+length(sig_ef_bs_H_O$covariate)
+# 0 tests are significant
+
+
+#mineral horizon
+##subset by horizon
+ps.H.prune.M <- subset_samples(ps.H.prune, Horizon =="M")
+###sanity check how many samples do we have and how many OTUs
+dim(otu_table(ps.H.prune.M)) #41 samples with 17 OTUs
+dim(otu_table(ps.H.prune)) #63 samples with 17 OTUs
+
+#fit a model
+ef_bs_H_M <- emuFit(formula = ~ SampleSev,
+                  Y=ps.H.prune.M,
+                  cluster=sample_data(ps.H.prune.M)$id, 
+                  verbose = TRUE)
+###51 tests, they do not take longer than the non subset test
+
+#visualize results using plot.emuFit
+plot(ef_bs_H_M)$plots
+plot(ef_bs_H)$plots
+#it appears that the absolute value of the estimates increased when subsetting by horizon
+
+sig_ef_bs_H_M <- filter(ef_bs_H_M$coef, pval<0.01)
+
+length(sig_ef_bs_H_M$covariate)
+# 0 tests are significant
+# despite the bigger estimates, none of the OTUs are significant.
+
+```
+
+### NOT WORKING pH as covariate
+not working because current phyloseq object is missing pH data
+
+```{r}
+#fit a model
+ef_bs_H_ph <- emuFit(formula = ~ SampleSev + pH,
+                  Y=ps.H.prune,
+                  cluster=sample_data(ps.H.prune)$id, 
+                  verbose = TRUE)
+### need to fix phyloseq object to include pH
+
+#visualize results using plot.emuFit
+plot(ef_bs_H_ph)$plots
+plot(ef_bs_H)$plots
+#it appears that the absolute value of the estimates increased when subsetting by horizon
+
+sig_ef_bs_H_M <- filter(ef_bs_H_M$coef, pval<0.01)
+
+length(sig_ef_bs_H_M$covariate)
+# 0 tests are significant
+# despite the bigger estimates, none of the OTUs are significant.
+
+```
+
+### NOT WORKING Subset by Horizon and pH as covariate
+
+```{r}
+
+```
+
+
+
+### Reacquainting Myself to the Data
+
+What variables exist in the Hole unit for SampleSev (there should be no severely burned samples (SampleSev=4)). 
+
+```{r}
+#How many samples were taken at the Hole unit? How many were mineral and how many were organic?
+length(sample_data(ps.3.H)$SampleSev)
+
+length(unique(sample_data(ps.3.H)$SampleSev))
+#4 levels of burn severity (SampleSev)
+
+length(unique(sample_data(ps.3.H)$Plot_Name)) 
+#14 sampled plots
+
+length(unique(sample_data(ps.3.H)$SampleID))
+#63 samples total
+
+temp <- dfview %>%
+  filter(Horizon == "M") 
+
+dfview <- as.data.frame(sample_data(ps.3.H))
+
+typeof(dfview)
+
+```
+
+
+#From vignettes
+
+##Explorations
+
+```{r}
+#How many OTUs in this dataset?
+dim(phyloseq::otu_table(ps.3)) #312 samples with 15715 mOTUs
+
+#Let's save these mOTU names in a vector. 
+mOTU_names <- colnames(phyloseq::otu_table(ps.3))
+
+#check out taxonomy table
+head(phyloseq::tax_table(ps.3)) #NOTE: this could use being cleaned up (look at corncob code)
+```
+
+## Fitting a model from the vignette
+
+```{r}
+#setting the reference variable (group to which all other groups are compared against)
+
+#for burn severity, we will make 1 the reference group for BL & H and 2 for WV (since there are no 1 samples at WV).
+
+phyloseq::sample_data(ps.3)$SampleSev <- factor(phyloseq::sample_data(ps.3)$SampleSev, levels = c("1","2", "3", "4"))
+
+#NOTE: we may also want to remove the 4 burn severity in the Hole unit as there is only one sample of it. Otherwise we should not interpret  the OTUs identified as differentially abundant in class 4 of the H unit. I think this won't impact the actual calculus of the other OTUs...
+```
+
+
+
+
+
+
+
+
+
+
+
+

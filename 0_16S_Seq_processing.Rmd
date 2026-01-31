@@ -1,0 +1,310 @@
+---
+title: "16S_Sequence_Processing"
+author: "Isabella Muscettola"
+date: "2023-04-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Exploratory work looking at the effect of different sequence trimming on output of taxa tables
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+#Full diversity Feature Table - analyzing the denoising stats
+full_denoise_stats <- read.table(file="C:/Users/iemus/Box/MSWhitman/LAVO_FireHistory/Data/Sequencing/Sequence_Processing/full-denoise-stats.tsv", sep = '\t', header=T)
+
+tall_denoise <- full_denoise_stats %>%
+  gather(key="step", value="perc.of.input", c(4, 7, 9))
+
+#summarize % filtered, % merged, % nonchimeric
+summary_denoise <- full_denoise_stats %>%
+  summarise_each(funs(mean)) 
+
+
+#visualize denoising stats
+tall_denoise$step <-  factor(tall_denoise$step, levels = c("percentage.of.input.passed.filter", "percentage.of.input.merged", "percentage.of.input.non.chimeric"))
+
+ggplot(tall_denoise, aes(x=step, y=perc.of.input)) + geom_boxplot()
+
+```
+
+
+```{r}
+#visualizing the 2nd best trimming option effect on percent of input through each step: 
+#2nd best trimming denoising stats
+secondbest_denoise <- read.table(file="C:/Users/iemus/Box/MSWhitman/LAVO_FireHistory/Data/Sequencing/Sequence_Processing/denoising-stats5.tsv", sep = '\t', header=T)
+
+tall_denoise5 <- secondbest_denoise %>%
+  gather(key="step", value="perc.of.input", c(4, 7, 9))
+
+#summarize % filtered, % merged, % nonchimeric
+summary_denoise5 <- secondbest_denoise %>%
+  summarise_each(funs(mean)) 
+
+
+#visualize denoising stats
+tall_denoise5$step <-  factor(tall_denoise5$step, levels = c("percentage.of.input.passed.filter", "percentage.of.input.merged", "percentage.of.input.non.chimeric"))
+
+ggplot(tall_denoise5, aes(x=step, y=perc.of.input)) + geom_boxplot()
+```
+
+#Install phyloseq
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("phyloseq")
+```
+
+#load libraries and set working directory
+```{r}
+library(ggplot2)
+library(phyloseq)
+library(plyr)
+library(dplyr)
+
+
+setwd("~/Desktop/LAVO22_16S_Library/30042023_MiniMac")
+getwd
+```
+
+
+```{r}
+# Import .biom file
+ps.raw = import_biom("~/Desktop/LAVO22_16S_Library/30042023_MiniMac/full-silva_OTU_table/feature-table-metaD-tax_json.biom" , parseFunction = parse_taxonomy_default)
+ps.raw
+sample_data(ps.raw)
+
+# This tells us a bit about our dataset
+# We might want to check out the data a bit to see what it looks like.
+# A key command for this is head()
+# head() allows us to see only the top of something. That's great if it's, for example, a 380-row OTU table.
+
+head(otu_table(ps.raw))
+# In the space below, try to look at the head of the sample data and our taxonomy table
+
+head(sample_data(ps.raw))
+head(tax_table(ps.raw))
+
+
+
+# Maybe we're wondering how many sequences are in each sample. We can calculate and plot this:
+
+d = sample_sums(ps.raw)
+# defining variable d as the column sums of our otu table.
+d = data.frame(names(d),d)
+# Creating a dataframe of our sample names
+colnames(d)=c("Sample","Total")
+# Naming the columns
+head(d)
+# displaying the top few values of d.
+
+
+p = qplot(d$Total, geom="histogram", binwidth=60)
+p
+# This is our first use of ggplot, a figure-making package.
+# You can make many different types of flexible, customized plots with ggplot.
+# Plotting the Total values we calculated above, to see the total reads from each sample
+
+#Some of our samples had very few sequences - some even had 0! (This is because we only used 1% of the total data, to #make analysis quicker.) For the purposes of this tutorial, we're going to want to get rid of the least abundant ones. #There's not a clear cutoff in the distribution we see above, so let's just take only samples with >200 sequences.
+# phyloseq has a function to do this, called prune_samples
+
+ps.cutoff = prune_samples(sample_sums(ps)>=50, ps.raw)
+ps.cutoff
+# How many samples do we have now?
+# How many samples are in the original ps object?
+# In the space below, modify the code from above to see what happens if you change the cutoff from 200 to something else.
+
+```
+
+```{r}
+
+#### Check taxonomy ####
+head(tax_table(ps.raw))
+# Yup, looks ugly.
+
+##Fixing the tax_table object to "clean-up" the column names
+
+x = data.frame(tax_table(ps.raw))
+# Making a dummy variable to store the taxonomy data
+
+colnames(x) = c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+# Assigning the proper column names instead of SILVA ranks
+
+x$Domain = gsub("d__", "", as.character(x$Domain))
+x$Phylum = gsub("p__", "", as.character(x$Phylum))
+x$Class = gsub("c__", "", as.character(x$Class))
+x$Order = gsub("o__", "", as.character(x$Order))
+x$Family = gsub("f__", "", as.character(x$Family))
+x$Genus = gsub("g__", "", as.character(x$Genus))
+x$Species = gsub("s__", "", as.character(x$Species))
+# Substituting the characters we don't want with nothing in the taxonomy
+
+x=tax_table(as.matrix(x,dimnames=list(row.names(x),colnames(x))))
+# Turning it into a taxonomy table, while saving the rownames and column names
+tax_table(ps.raw)=x
+# Reassigning the taxonomy table in ps_xxx to the new modified one
+
+head(tax_table(ps.raw))
+# Check for success
+# Looks good.
+
+```
+
+```{r}
+
+```
+
+```{r}
+#### Shape up the full PS object, merge sequencing runs  ####
+
+# We have duplicate sequencing for each sample. We need to merge each sample's duplicates.
+# Use merge function in phylogeny to add the sample counts together (for this dataset, this is what we want.)
+# You’ll need a column in the sample data that has the ID the same for all the paired samples.
+# here it is "Submission_Sample_Name" (previously SampleID)
+
+length(sample_data(ps.raw)$Submission_Sample_Name) / length(levels(as.factor(sample_data(ps.raw)$Submission_Sample_Name)))
+
+ps = merge_samples(ps.raw, sample_data(ps.raw)$Submission_Sample_Name)
+warnings()
+?merge_samples
+ps #The taxonomy is there...
+samdat = sample_data(ps) #...But the sample metadata is not.
+
+sample_data(ps)$Submission_Sample_Name
+
+#rename row names
+#row.names(sample_data(ps)) = sample_data(ps)$Submission_Sample_Name ##error: non-unique values when setting row.names; duplicate 'row.names' are not allowed.... could be because I have some reruns of samples. try merging on numeric ascending list "MySampleID"
+#sample_data(ps)
+#sample_data(ps)$Submission_Sample_Name
+
+samdatdftemp = data.frame(SampleID = sample_names(ps),Submission_Sample_Name = sample_names(ps))
+row.names(samdatdftemp) = samdatdftemp$SampleID
+samdatdftemp = sample_data(samdatdftemp)
+sample_data(ps) = samdatdftemp
+
+
+metadata = read.csv(file ="~/Desktop/LAVO22_16S_Library/30042023_MiniMac/LAVO22_Metadata.csv", header=TRUE, stringsAsFactors=TRUE)
+head(metadata)
+
+metadata$Run = as.factor(substring(metadata$Run_Submission_Name,1,1))
+metadata = metadata %>%
+  filter(Run=="1")
+
+#merge metadata df with sample_data to put the metadata in the correct order
+df2 = merge(data.frame(sample_data(ps)),metadata,by="Submission_Sample_Name")
+head(df2)
+
+row.names(df2) = df2$SampleID
+sample_data(ps) = sample_data(df2)
+
+
+
+# Remove chloroplast and mitochondria from the dataset
+ps
+ps <- ps %>%
+  subset_taxa(
+    Family != "Mitochondria" &
+      Class != "Chloroplast" &
+      Order != "Chloroplast" &
+      Domain != "Eukaryota"
+  )
+ps = prune_taxa(taxa_sums(ps) > 0, ps)
+ps
+
+# Remove blanks and positive control
+ps.samples = subset_samples(ps, Pos_Cntrl == "N")
+ps.samples = subset_samples(ps.samples, Blank == "N")
+ps.samples
+
+# Save ps object
+saveRDS(ps.samples,"~/Desktop/LAVO22_16S_Library/30042023_MiniMac/ps.initial.samples")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################ West
+#### make a ps object for just the mixed community "generous donor" sample ####
+ps.mixed = subset_samples(ps, SampleID=="499")
+
+nsamples(ps.mixed) #should be 1
+sample_data(ps.mixed)
+ps.mixed = prune_taxa(taxa_sums(ps.mixed) > 0, ps.mixed)
+ps.mixed
+saveRDS(ps.mixed,"ps.CON19.generousdonor")
+
+#### make a ps object including all blanks ####
+#filter out the mixed community sample, and resequenced samples
+nsamples(ps)
+ps1 = subset_samples(ps, SampleID!="499")
+ps1 = subset_samples(ps1, SampleID!="3087")
+ps1 = subset_samples(ps1, SampleID!="3093")
+nsamples(ps1)
+ps1 = prune_taxa(taxa_sums(ps1) > 0, ps1)
+ps1
+saveRDS(ps1,"ps.CON19.withallblanks")
+
+#### cleaning up ps for the real work. ####
+
+# filter out all blanks
+ps2 = subset_samples(ps1, Blank!="Y")
+nsamples(ps2) #should be 446 (12 trts x 32 + 32 initial + 32 agitation....minus 2 that were dropped during extraction)
+#You'll save it a little later..
+
+# remove columns that designate the blanks
+sample_data(ps2)
+sample_data(ps2) = sample_data(ps2)[,-c(3,5,6,8)]
+
+# Put factors in order
+head(sample_data(ps2))
+sample_data(ps2)$TimesMixed <- ordered(sample_data(ps2)$TimesMixed, levels=c("Initial", "1X", "4X", "16X"))
+sample_data(ps2)$Trt <- ordered(sample_data(ps2)$Trt, levels=c("Initial", "1X_O_U","1X_O_S","1X_A_U","1X_A_S",
+                                                               "4X_O","4XV_O","4X_A","4XV_A",
+                                                               "16X_O","16X_A","16XV_O","16XV_A",
+                                                               "Meta_O_U", "Meta_O_S", "Meta_A_U", "Meta_A_S"))
+sample_data(ps2)$GroupOrAgit <- ordered(sample_data(ps2)$GroupOrAgit, levels=c("Initial", "1", "4", "16", "Vortex"))
+sample_data(ps2)$O2 <- ordered(sample_data(ps2)$O2, levels=c("Initial", "Oxic", "Anoxic"))
+sample_data(ps2)$Moisture <- ordered(sample_data(ps2)$Moisture, levels=c("Initial", "Unsaturated", "Saturated"))
+sample_data(ps2)$Meta <- ordered(sample_data(ps2)$Meta, levels=c("Initial", "N", "Meta"))
+
+
+str(sample_data(ps2))
+
+ps2
+ps2 = prune_taxa(taxa_sums(ps2) > 0, ps2)
+ps2
+
+saveRDS(ps2,"ps.CON19")
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
