@@ -12,12 +12,15 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
+library(patchwork)
+
+path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
 
 #latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
-    metadata <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+    metadata <- read.csv(paste0(path, "Data/R/09202025_LAVO22_Metadata.csv"))
 
 #soil bulk density data
-bulkdensityraw <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/Muscettola_Sites_BulkDensity.csv") 
+bulkdensityraw <- read.csv(paste0(path, "Data/R/Muscettola_Sites_BulkDensity.csv")) 
 #tidytable
 bulkdensityraw <- filter(bulkdensityraw, !is.na(Bag.Number))
 #clean up the Core.ID so it matches the syntax of the metadata
@@ -25,6 +28,8 @@ bulkdensityraw <- bulkdensityraw %>%
   mutate(Core.ID = str_replace_all(Core.ID, " ", "_")) %>%
   mutate(Core.ID=ifelse(endsWith(Core.ID, "_"), str_sub(Core.ID, 1, -2), Core.ID))
   
+#soil texture data
+textureraw <-read.csv(paste0(path, "Data/R/LAVO22_SoilTexture.csv"))
 
 #dummy check: how many plots had cores taken for bulk density analyses? 
 test <- bulkdensityraw %>%
@@ -35,6 +40,7 @@ test <- bulkdensityraw %>%
 rm(test)
 ```
 
+# Data wrangling
 ## Calculate bulk density 
 ```{r}
 # calculate bulk density of entire core (including roots and rocks)
@@ -68,27 +74,97 @@ bulkdensity <- bulkdensity %>%
 
 #bulk density is still lower than we would expect (0.45g/cm3-1.28g/cm3)
 
+#a quick visualization:
+a <- ggplot(bulkdensity, aes(Site, bdof2mmfraction_gcm3)) +geom_boxplot()
+a
 ```
 
-#Some quick visualizations
+## tidy texture data
 ```{r}
+texture <- textureraw %>%
+  #add core name to texture table
+  left_join(bulkdensity %>% select(Core.ID, Bag.Number, Site, Code), by=c("Sample_ID" = "Bag.Number")) %>%
+  #clean up the treatment
+  mutate(trt = ifelse(is.na(Code), "LF", "MF"))
 
+#quick visualization
+b <- ggplot(texture, aes(Site, Sand_perc)) +geom_boxplot()
+c <- ggplot(texture, aes(Site, Silt_perc)) +geom_boxplot()
+d <- ggplot(texture, aes(Site, Clay_perc)) +geom_boxplot()
+
+b+c+d
+```
+
+# Summary Tables 
+
+## bulk density
+
+```{r}
 bd_summary <- bulkdensity %>%
   mutate(trt = ifelse(is.na(Code), "LF", "MF")) %>%
   group_by(Site, trt) %>%
-  summarise(min=min(bdof2mmfraction_gcm3), median=median(bdof2mmfraction_gcm3), max=max(bdof2mmfraction_gcm3)) 
+  summarise(n = n(), 
+            BDMean = mean(bdof2mmfraction_gcm3),
+            BDMinimum=min(bdof2mmfraction_gcm3), 
+            BDMedian=median(bdof2mmfraction_gcm3), 
+            BDMaximum=max(bdof2mmfraction_gcm3),
+            BDSD=sd(bdof2mmfraction_gcm3)) %>%
+  mutate(Property = "BulkDensity")
 
-wholecorebd_summary <- bulkdensity %>%
-  mutate(trt = ifelse(is.na(Code), "LF", "MF")) %>%
-  group_by(Site, trt) %>%
-  summarise(min=min(totalcorebd_gcm3), median=median(totalcorebd_gcm3), max=max(totalcorebd_gcm3))  
-
-a <- ggplot(bulkdensity, aes(Site, bdof2mmfraction_gcm3)) +geom_boxplot()
-a
+#wholecorebd_summary <- bulkdensity %>%
+#  mutate(trt = ifelse(is.na(Code), "LF", "MF")) %>%
+#  group_by(Site, trt) %>%
+#  summarise(min=min(totalcorebd_gcm3), median=median(totalcorebd_gcm3), max=max(totalcorebd_gcm3))  
 
 ```
 
-#what are the predicted bulk densities by soil map unit? 
+## texture
+```{r}
+texture_summary <- texture %>%
+  group_by(Site, trt) %>%
+  summarise(SandMean = mean(Sand_perc), SandSD = sd(Sand_perc), SandMax=max(Sand_perc), SandMedian=median(Sand_perc), SandMin=min(Sand_perc),
+            SiltMean = mean(Silt_perc), SiltSD = sd(Silt_perc), SiltMax=max(Silt_perc), SiltMedian=median(Silt_perc), SiltMin=min(Silt_perc),
+            ClayMean = mean(Clay_perc), ClaySD = sd(Clay_perc), ClayMax=max(Clay_perc), ClayMedian=median(Clay_perc), ClayMin=min(Clay_perc))
+```
+## merge table and tidy for reporting figure
+```{r}
+# merge bulk density and texture summary tables
+bd_texture_summary <- bd_summary %>%
+  left_join(texture_summary, by=c("Site", "trt"))
+
+#save merged table to file directory 
+write.csv(bd_texture_summary, paste0(path, "Data/R/TableSummary/LAVO22_TextureandBulkDensitySummary_full.csv"))
+
+#tidy summary table for reporting
+final_summary <- bd_texture_summary %>%
+  mutate('Bulk Density' = paste0(round(BDMean, digits=1), " (±", round(BDSD, digits=1), ")"),
+         'Sand Percentage' = paste0(round(SandMean, digits=1), " (±", round(SandSD, digits=1), ")"),
+         'Silt Percentage' = paste0(round(SiltMean, digits=1), " (±", round(SiltSD, digits=1), ")"),
+         'Clay Percentage' = paste0(round(ClayMean, digits=1), " (±", round(ClaySD, digits=1), ")")) %>%
+  mutate(Treatment = ifelse(trt=="MF", "more fire", ifelse(Site=="UB", "no fire", "less fire"))) %>%
+  mutate(Unit = ifelse(Site=="BL", "Butte Lake", ifelse(Site == "H", "Hole", ifelse(Site == "WV", "Warner Valley", "Unburned")))) %>%
+  select(Unit, Treatment, n, 'Bulk Density', 'Sand Percentage', 'Silt Percentage', 'Clay Percentage')
+
+#save final summary table to file directory
+write.csv(final_summary, paste0(path, "Figures/bulkdensity/bd_texture_summary.csv"))
+```
+
+# ONLY DO ONCE - Add soil texture and bulk density to metadata
+need to fix by calculating bulk density first
+
+```{r}
+    #add C/N concentrations to metadata 
+      
+    newmetadata <- left_join(metadata, CN_tidy[, 2:6], by=c("Full_Sample_Name" = "Sample.Name")) %>%
+      mutate(., Plot_Horizon = paste(Plot_Name, Horizon, sep="_"))
+      #includes a column for both the plot and horizon (this is useful when looking at similarity of soil core characteristics within the same plot)
+    
+    #save metadata 
+    write.csv(newmetadata,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+    rm(temp, CN1, CN2, CN, metadata)
+```
+
+#Explorations: what are the predicted bulk densities by soil map unit? 
 
 ```{r}
 ##using the metadata, summarize by map unit
@@ -134,29 +210,6 @@ b
 c <- ggplot(temp, aes(bdof2mmfraction_gcm3, Volume.of.rocks..mL./totalcorevolume_cm3*100)) + geom_point(aes(color=factor(Soil_mu))) + geom_smooth(method = "lm", se=TRUE)
 c
     
-```
-
-
-## ONLY DO ONCE - Add soil texture and bulk density to metadata
-need to fix by calculating bulk density first
-
-```{r}
-    #add C/N concentrations to metadata 
-      
-    newmetadata <- left_join(metadata, CN_tidy[, 2:6], by=c("Full_Sample_Name" = "Sample.Name")) %>%
-      mutate(., Plot_Horizon = paste(Plot_Name, Horizon, sep="_"))
-      #includes a column for both the plot and horizon (this is useful when looking at similarity of soil core characteristics within the same plot)
-    
-    #save metadata 
-    write.csv(newmetadata,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
-    rm(temp, CN1, CN2, CN, metadata)
-```
-
-## Primary Explorations: What is the distribution of soil texture across units and treatments
-
-```{r}
-metadata <- read.csv(newmetadata, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
-
 ```
 
 
