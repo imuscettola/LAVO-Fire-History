@@ -27,6 +27,9 @@ library(emmeans)
 library(viridis)
 library(MuMIn)
 library(vegan)
+library(stringr)
+
+path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
 ```
 
 ## Data Loading and Tidying ONLY DO ONCE
@@ -226,7 +229,17 @@ df.noUB$Horizon <- factor(df.noUB$Horizon)
 ## Conversion of concentration to stock
 
 ```{r}
-###need to add bulk density to dataframe!
+df <- read.csv(paste0(path, "Data/R/CarbonNitrogen/CN_merged_final.csv"))
+
+df <- df %>%
+  mutate(Plot_Name=str_sub(Sample.Name, 1, -4)) %>%
+  #there appears to be a duplicate sample (BL PIJE 04 AM) let's remove one of the reads for a cleaner dataframe. When made into final code and dataframe this will need to be addressed during the "Tidy up metadata" section of code. 
+  filter(!endsWith(Plot_Name,"0")) %>%
+  mutate(Plot_Core=paste0(Plot_Name, str_sub(Sample.Name, -2, -2)))
+
+### summarize CN for the average of each plot
+CN.df.summary <
+
 df.noUB$CStock <- df.noUb$cleanC * df.noUb$bd * (1- df.noUb$CF) *5
 df.noUB$NStock <- df.noUb$cleanC * df.noUb$bd * (1-df.noUb$CF) *5
 df.noUB$CNratio <- df.noUb$cleanC/df.noUb$cleanN

@@ -16,9 +16,6 @@ library(patchwork)
 
 path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
 
-#latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
-    metadata <- read.csv(paste0(path, "Data/R/09202025_LAVO22_Metadata.csv"))
-
 #soil bulk density data
 bulkdensityraw <- read.csv(paste0(path, "Data/R/Muscettola_Sites_BulkDensity.csv")) 
 #tidytable
@@ -150,18 +147,22 @@ write.csv(final_summary, paste0(path, "Figures/bulkdensity/bd_texture_summary.cs
 ```
 
 # ONLY DO ONCE - Add soil texture and bulk density to metadata
-need to fix by calculating bulk density first
 
 ```{r}
-    #add C/N concentrations to metadata 
-      
-    newmetadata <- left_join(metadata, CN_tidy[, 2:6], by=c("Full_Sample_Name" = "Sample.Name")) %>%
-      mutate(., Plot_Horizon = paste(Plot_Name, Horizon, sep="_"))
-      #includes a column for both the plot and horizon (this is useful when looking at similarity of soil core characteristics within the same plot)
-    
-    #save metadata 
-    write.csv(newmetadata,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
-    rm(temp, CN1, CN2, CN, metadata)
+temp1 <- select(texture, Core.ID, Sand_perc:Texture_Name)
+temp2 <- select(bulkdensity, Core.ID, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., totalcorebd_gcm3:bdof2mmfraction_gcm3)
+
+bd_texture <- left_join(temp1, temp2, by="Core.ID")
+
+write.csv(bd_texture, paste0(path, "Data/R/bulkdensity_texture.csv"), row.names=FALSE)
+
+#latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
+    metadata <- read.csv(paste0(path, "Data/R/09202025_LAVO22_Metadata.csv"))
+
+newmetadata <- left_join(metadata, bd_texture, by=c("Plot_Name" = "Core.ID"))
+
+write.csv(newmetadata, paste0(path, "Data/R/02162026_LAVO22_Metadata.csv"), row.names=FALSE)
+
 ```
 
 #Explorations: what are the predicted bulk densities by soil map unit? 
