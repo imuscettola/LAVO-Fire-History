@@ -151,12 +151,14 @@ write.csv(final_summary, paste0(path, "Figures/bulkdensity/bd_texture_summary.cs
 # ONLY DO ONCE - Add soil texture and bulk density to metadata
 
 ```{r}
-temp1 <- select(texture, Core.ID, Sand_perc:Texture_Name)
-temp2 <- select(bulkdensity, Core.ID, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., Average.Height..cm., totalcorebd_gcm3:bdof2mmfraction_gcm3)
+#temp1 <- select(texture, Core.ID, Sand_perc:Texture_Name)
+#temp2 <- select(bulkdensity, Core.ID, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., Average.Height..cm., totalcorebd_gcm3:bdof2mmfraction_gcm3)
 
-bd_texture <- left_join(temp1, temp2, by="Core.ID")
+#bd_texture <- left_join(temp1, temp2, by="Core.ID")
 
-write.csv(bd_texture, paste0(path, "Data/R/bulkdensity_texture.csv"), row.names=FALSE)
+#write.csv(bd_texture, paste0(path, "Data/R/bulkdensity_texture.csv"), row.names=FALSE)
+
+bd_texture <- read.csv(paste0(path, "Data/R/bulkdensity_texture.csv"))
 
 #latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
     metadata <- read.csv(paste0(path, "Data/R/202607_LAVO22_Metadata.csv"))
@@ -168,7 +170,8 @@ write.csv(bd_texture, paste0(path, "Data/R/bulkdensity_texture.csv"), row.names=
       ~ if_else(str_ends(Full_Sample_Name, "M"), ., NA)
     )
   ) %>%
-    select(., Plot_Name:Texture_Name, Volume.of.rocks..mL., Average.Height..cm., bdof2mmfraction_gcm3)
+    select(., Plot_Name:Texture_Name, Volume.of.rocks..mL., Average.Height..cm., bdof2mmfraction_gcm3) %>%
+    mutate(C_N=cleanC/cleanN)
 
 
 #write.csv(newmetadata, paste0(path, "Data/R/20260724_LAVO22_Metadata.csv"), row.names=FALSE)
