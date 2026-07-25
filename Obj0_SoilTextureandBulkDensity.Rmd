@@ -90,6 +90,8 @@ c <- ggplot(texture, aes(Site, Silt_perc)) +geom_boxplot()
 d <- ggplot(texture, aes(Site, Clay_perc)) +geom_boxplot()
 
 b+c+d
+
+ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/bulkdensity/SandSiltClaypec_byUnit.png", width=5, height=3)
 ```
 
 # Summary Tables 
@@ -152,16 +154,25 @@ write.csv(final_summary, paste0(path, "Figures/bulkdensity/bd_texture_summary.cs
 temp1 <- select(texture, Core.ID, Sand_perc:Texture_Name)
 temp2 <- select(bulkdensity, Core.ID, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., totalcorebd_gcm3:bdof2mmfraction_gcm3)
 
-bd_texture <- left_join(temp1, temp2, by="Core.ID")
-
 write.csv(bd_texture, paste0(path, "Data/R/bulkdensity_texture.csv"), row.names=FALSE)
 
 #latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
-    metadata <- read.csv(paste0(path, "Data/R/09202025_LAVO22_Metadata.csv"))
+    metadata <- read.csv(paste0(path, "Data/R/202607_LAVO22_Metadata.csv"))
 
-newmetadata <- left_join(metadata, bd_texture, by=c("Plot_Name" = "Core.ID"))
+newmetadata <- metadata %>%
+  left_join(bd_texture, by = c("Plot_Name" = "Core.ID"))
+  
+  newmetadata <- metadata %>%
+  left_join(bd_texture, by = c("Plot_Name" = "Core.ID")) %>%
+  mutate(
+    across(c(Sand_perc, Silt_perc, Clay_perc, Texture_Name, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., totalcorebd_gcm3, volume2mmfraction_cm3, bdof2mmfraction_gcm3),
+      ~ if_else(str_ends(Full_Sample_Name, "M"), ., NA)
+    )
+  ) %>%
+    select(., Plot_Name:Texture_Name, Volume.of.rocks..mL., bdof2mmfraction_gcm3)
 
-write.csv(newmetadata, paste0(path, "Data/R/02162026_LAVO22_Metadata.csv"), row.names=FALSE)
+
+write.csv(newmetadata, paste0(path, "Data/R/20260724_LAVO22_Metadata.csv"), row.names=FALSE)
 
 ```
 
@@ -169,14 +180,14 @@ write.csv(newmetadata, paste0(path, "Data/R/02162026_LAVO22_Metadata.csv"), row.
 
 ```{r}
 ##using the metadata, summarize by map unit
-metadata<-read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+metadata<-read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/20260724_LAVO22_Metadata.csv")
 
 df <- metadata %>%
       filter(startsWith(Run_Submission_Name, "1")) %>%
       #removes 2nd sequencing run 
       filter(!endsWith(Run_Submission_Name, "2")) %>% 
       #removes duplicate samples from sequencing 
-      select(-1, -(3:7), -(15:17), -(23:27))
+      select(-(2:6), -(14:16), -(22:26))
       #removes extraneous columns that are related to DNA sequencing
 
     #set column types 
@@ -186,7 +197,19 @@ df <- metadata %>%
 soil_mu_summary <- df %>%
   distinct(Plot_Name, .keep_all = TRUE) %>%
   group_by(Soil_mu) %>%
-  summarise(n=n())
+  summarise(n=n(), mean_bd_gcm3 = mean(bdof2mmfraction_gcm3, na.rm=TRUE), sd = sd(bdof2mmfraction_gcm3, na.rm = TRUE)) %>%
+  mutate(soilsurvey_avg_bd_gcm3 = ifelse(Soil_mu=="100", "0.9", ifelse(Soil_mu=="101", "1.26", ifelse(Soil_mu=="108", "0.9", ifelse(Soil_mu=="168", "1.02", ifelse(Soil_mu=="138", "0.9-1.26", ifelse(Soil_mu=="145", "0.9-1.26", ifelse(Soil_mu=="126", "0.95", "1.00")))))))) %>%
+  mutate('Mean Bulk Density' = paste0(round(mean_bd_gcm3, digits=1), " (±", round(sd, digits=1), ")"))
+
+#add descriptions of soil type
+temp <- select(metadata, c(Soil_mu, Soil_Order, Soil_Suborder, Soil_GreatGroup, Soil_Subgroup, Soil_Family, Soil_Series)) %>%
+  distinct()
+temp2 <- select(soil_mu_summary, 1:2, 6)
+
+soil_mu_summary <- left_join(temp, temp2, by="Soil_mu")
+
+#save summary bulk density table
+write.csv(soil_mu_summary, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/bulkdensity/bd_summary_bysoiltype.csv")
 
 #soil mu -> bd, one-third bar (bd at water tension of 1/3 bar)
 #100 -> 0.9g/cm3
@@ -199,7 +222,7 @@ soil_mu_summary <- df %>%
 
 #now let's graph bulk density by map unit
 temp <- bulkdensity %>%
-  left_join(metadata[, c(2, 10:11, 18, 39:45)], by = c("Core.ID" = "Plot_Name")) %>%
+  left_join(metadata[, c(1, 9:10, 17, 38:44)], by = c("Core.ID" = "Plot_Name")) %>%
   distinct(Core.ID, .keep_all = TRUE)
 
 temp$Soil_mu <- as.factor(temp$Soil_mu)
@@ -207,9 +230,11 @@ temp$Soil_mu <- as.factor(temp$Soil_mu)
 b <- ggplot(temp, aes(Soil_mu, bdof2mmfraction_gcm3)) + geom_boxplot()
 b
 
+ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/bulkdensity/bdbysoilmu.png", width=5, height=3)
+
 #is there a negative correlation between volume of rocks and bulk density
-c <- ggplot(temp, aes(bdof2mmfraction_gcm3, Volume.of.rocks..mL./totalcorevolume_cm3*100)) + geom_point(aes(color=factor(Soil_mu))) + geom_smooth(method = "lm", se=TRUE)
-c
+#c <- ggplot(temp, aes(bdof2mmfraction_gcm3, Volume.of.rocks..mL./totalcorevolume_cm3*100)) + geom_point(aes(color=factor(Soil_mu))) + geom_smooth(method = "lm", se=TRUE)
+#c
     
 ```
 
