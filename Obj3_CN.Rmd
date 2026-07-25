@@ -30,6 +30,15 @@ library(vegan)
 library(stringr)
 
 path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
+
+df <- read.csv(paste0(path, "Data/R/df_allsamples_allmeasurements_final.csv"))
+df <- df %>%
+  mutate(Horizon=factor(Horizon, levels=c("O", "M"))) %>%
+  mutate(Plot_Name = str_sub(Sample_Core_Name, end = -3))
+df$SampleSev <- as.factor(df$SampleSev) 
+
+df.noUB <- filter(df, !Unit=="UB")
+
 ```
 
 ## Data Loading and Tidying ONLY DO ONCE
@@ -210,7 +219,7 @@ df.noUB$SampleSev <- factor(df.noUB$SampleSev, levels = c(1, 2, 3, 4))
 df.noUB$Horizon <- factor(df.noUB$Horizon)
 ```
 
-## Tidy Metadata as a dataframe for non-DNA analyses. 
+### Tidy Metadata as a dataframe for non-DNA analyses. 
 For example in order to make a graph of %C we must remove the duplicate rows of each sample from the Submission Name. To tidy the dataframe we will also remove the DNA relevant columns such as DNA Extraction Round. This will make subsequent, non-microbial analyses, easier.
 
 ```{r}
@@ -232,7 +241,7 @@ df.noUB <- filter(df, !Unit=="UB")
 
 ```
 
-## Summarize Carbon Stocks
+#### Summarize Carbon Stocks
 Since only 1 bulk density core was taken at select plots, the 3 replicates (A, B, and C) have the same bulk density but distict C concentrations. One way of dealing with this nested plot design is by taking the average of the 3 replicates for 1 Carbon Stock per plot. In order to do that we must summarize the dataframe by Plot_Horizon
 
 ```{r}
@@ -293,9 +302,6 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 ```
 
 ```{r}
-df.noUB <- df.noUB %>%
-  mutate(Horizon=factor(Horizon, levels=c("O", "M")))
-
 #visualize Carbon data by treatment faceted by unit and horizon
 C.firehistory <- ggplot(df.noUB, aes(Trt, cleanC, fill=Trt)) 
 C.firehistory <- C.firehistory + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("M"="Mineral", "O"="Organic", "BL"="Butte Lake", "H"="Hole", "WV"="Warner Valley"))) 
@@ -321,8 +327,6 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 ```
 
 ```{r}
-df.noUB$SampleSev <- as.factor(df.noUB$SampleSev)
-
 # % Carbon by burn severity faceted by unit and horizon 
 C.burnsev <- ggplot(df.noUB, aes(SampleSev, cleanC, fill=SampleSev)) 
 C.burnsev <- C.burnsev + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "O" = "Organic", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
@@ -347,7 +351,7 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 
 ```
 
-### C & N Stocks; Stopped here 9/29/2025
+### C Stocks
 
 ```{r}
 #visualize C/N data by treatment faceted by unit and horizon
@@ -414,105 +418,105 @@ linear mixed model with random effects of plot and core
 ```{r}
 #Forwards model selection 
 #Horizon 
-mod.hor <- lmer(percC ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
+mod.hor <- lmer(cleanC ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
 summary(mod.hor) 
 anova(mod.hor)
 #horizon is significant; p=2.2e-16
 
 #Unit 
-mod.unit <- lmer(percC~Unit + (1|Plot_Name/Rep), data=df.noUB)
+mod.unit <- lmer(cleanC~Unit + (1|Plot_Name/Rep), data=df.noUB)
 anova(mod.unit) 
-# \*\*\* p=1.6e-8
+# *** p=4.498e-9
 
 #Soil subgroup 
-mod.soil <- lmer(percC~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
+mod.soil <- lmer(cleanC~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.soil) 
-# \*\*\* p=0.0002097
+# *** p=2.502e-06
 
 #Sample severity 
-mod.sev <-lmer(percC~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
+mod.sev <-lmer(cleanC~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
 summary(mod.sev) 
 anova(mod.sev) 
-#\* p=0.030
+# marginal p=0.06324
 
 #VegType 
-mod.veg <- lmer(percC~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
+mod.veg <- lmer(cleanC~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.veg) 
-#\*\*\* p=8.1e-6
+# *** p=7.98e-7
 
 #Trt 
-mod.trt <- lmer(percC~Trt + (1|Plot_Name/Rep), data=df.noUB)
+mod.trt <- lmer(cleanC~Trt + (1|Plot_Name/Rep), data=df.noUB)
 anova(mod.trt) 
-# Trt not sig p=0.5
+# Trt not sig p=0.3817
 
 #unit and soil subgroup 
-mod.u.sg <- lmer(percC~Unit+Soil_Subgroup + (1\|Plot_Name/Rep), data=df.noUB) 
+mod.u.sg <- lmer(cleanC~Unit+Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.sg) 
-#when accounting for unit, soil type is no longer a sig predictor
+#when accounting for unit (p=0.00286), soil type is no longer a sig predictor (p=0.161)
 
 #unit and veg type 
-mod.u.v <- lmer(percC~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.v <- lmer(cleanC~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.v) 
-#when accounting for unit, veg type is no longer a sig predictor
+#when accounting for unit (p=0.002254), veg type is no longer a sig predictor (p=0.115)
 
 #unit and horizon 
-mod.u.h <-lmer(percC~Unit+Horizon+(1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h <-lmer(cleanC~Unit+Horizon+(1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h) 
-#both unit and horizon sig predictors
+#both unit (p=2.86e-10) and horizon (p<2.2e-16) sig predictors
 
 #unit, horizon, trt 
-mod.u.h.t <- lmer(percC~Unit+Horizon+Trt +(1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.t <- lmer(cleanC~Unit+Horizon+Trt +(1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.t) 
-#trt not sig predictor
+#trt not sig predictor (p=0.2248)
 
 #unit, horizon, samplesev 
-mod.u.h.ss <- lmer(percC~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
+mod.u.h.ss <- lmer(cleanC~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
 anova(mod.u.h.ss) 
-#burn severity is sig predictor
+#burn severity is sig predictor (p=0.004434)
 
 #unit, horizon, samplesev, trt 
-mod.u.h.ss.t <- lmer(percC~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.t <- lmer(cleanC~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.t) 
-#trt still not sig predictor
+#trt still not sig predictor (p=0.976)
 
 ##interactions 2-way 
-mod.u.h.2.ss.t <- lmer(percC~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.2.ss.t <- lmer(cleanC~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.2.ss.t) 
-#2-way interaction between unit and horizon (p=0.00048) 
+#2-way interaction between unit and horizon (p=0.000873) Trt still not sig (p=0.994)
 
-mod.u.ss.2.h.t <- lmer(percC~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.ss.2.h.t <- lmer(cleanC~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.ss.2.h.t) 
-#no 2-way interaction of unit and samplesev 
+#no 2-way interaction of unit and samplesev (p=0.390)
 
-mod.u.t.2.ss.h <- lmer(percC~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.t.2.ss.h <- lmer(cleanC~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.t.2.ss.h) 
 #no Unit*Trt
 
-mod.u.h.ss.2.t <- lmer(percC~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.2.t <- lmer(cleanC~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.2.t)
-#Horizon*SampleSev 
+#Horizon*SampleSev is significant (p=0.0108)
 
-mod.u.h.t.2.ss <- lmer(percC~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.t.2.ss <- lmer(cleanC~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.t.2.ss) #no Horizon*Trt 
 
-mod.u.h.ss.t.2 <- lmer(percC~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.t.2 <- lmer(cleanC~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.t.2) #no SampleSev*Trt
 
-mod.u.h.2.ss.2.t <- lmer(percC~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.2.ss.2.t <- lmer(cleanC~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.2.ss.2.t) 
-#unit*horizon and horizon*SampleSev sig
+#unit*horizon and horizon*SampleSev sig (p=0.00075 and 0.00903, respectively)
 
 ##interactions 3-way 
-mod.u.h.ss.3.t <-lmer(percC~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.3.t <-lmer(cleanC~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.3.t) #no unit*horizon*samplesev
 
 #from forward model selection appears that Unit*Horizon+Horizon*SampleSev+Trt is the best fit model
 summary(mod.u.h.2.ss.2.t)
 
 anova(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.h, mod.u.h.t, mod.u.h.ss, mod.u.h.ss.t, mod.u.h.2.ss.t, mod.u.ss.2.h.t, mod.u.t.2.ss.h, mod.u.h.ss.2.t, mod.u.h.t.2.ss, mod.u.h.ss.t.2, mod.u.h.2.ss.2.t, mod.u.h.ss.3.t) 
-#model with lowest AIC: Unit*Horizon+Horizon*SampleSev+Trt (1831.3) 
-#model with 2nd lowest AIC: Unit*Horizon*SampleSev+Trt (1834.3) 
-#3rd lowest AIC: Unit\*Horizon+SampleSev+Trt (1834.7)
+#model with lowest AIC: Unit*Horizon+Horizon*SampleSev+Trt (2004.2) 
+#model with 2nd lowest AIC: Unit*Horizon*SampleSev+Trt (2013.8) 
+#3rd lowest AIC: Unit*SampleSev+Horizon+Trt (2015.1)
 
 #%C model selected is Unit*Horizon+Horizon*SampleSev+Trt 
 finalmod.C <- mod.u.h.2.ss.2.t 
@@ -524,89 +528,89 @@ rm(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mo
 
 ```{r}
 #Forwards model selection #Horizon 
-mod.hor <- lmer(percN ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.hor) #horizon is significant; p=2.2e-16
+mod.hor <- lmer(cleanN ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.hor) #horizon is significant; p<2.2e-16
 
 #Unit 
-mod.unit <- lmer(percN~Unit + (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.unit) # \*\*\* p=2e-13
+mod.unit <- lmer(cleanN~Unit + (1|Plot_Name/Rep), data=df.noUB)
+anova(mod.unit) # *** p=2.88e-13
 
 #Soil subgroup 
-mod.soil <- lmer(percN~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.soil) # \*\*\* p=0.1.38e-6
+mod.soil <- lmer(cleanN~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.soil) # *** p=1.053e-7
 
 #Sample severity 
-mod.sev <-lmer(percN~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.sev) #* p=0.04812
+mod.sev <-lmer(cleanN~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.sev) #sample severity is NOT sig p=0.2062
 
 #VegType 
-mod.veg <- lmer(percN~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.veg) #\*\*\* p=2.0e-8
+mod.veg <- lmer(cleanN~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.veg) # *** p=1.50e-8
 
 #Trt 
-mod.trt <- lmer(percN~Trt + (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.trt) # Trt not sig p=0.608
+mod.trt <- lmer(cleanN~Trt + (1|Plot_Name/Rep), data=df.noUB)
+anova(mod.trt) # Trt not sig p=0.636
 
 #unit and soil subgroup 
-mod.u.sg <- lmer(percN~Unit+Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.sg) #when accounting for unit, soil type is no longer a sig predictor
+mod.u.sg <- lmer(cleanN~Unit+Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.sg) #when accounting for unit, soil type is no longer a sig predictor (p=0.4)
 
 #unit and veg type 
-mod.u.v <- lmer(percN~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.v <- lmer(cleanN~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.v) #when accounting for unit, veg type is no longer a sig predictor
 
 #unit and horizon 
-mod.u.h <-lmer(percN~Unit+Horizon+ (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h <-lmer(cleanN~Unit+Horizon+ (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h) #both unit and horizon sig predictors
 
 #unit, horizon, trt 
-mod.u.h.t <- lmer(percN~Unit+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.t <- lmer(cleanN~Unit+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.t) #trt not sig predictor
 
 #unit, horizon, samplesev 
-mod.u.h.ss <- lmer(percN~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.u.h.ss) #burn severity is sig predictor
+mod.u.h.ss <- lmer(cleanN~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
+anova(mod.u.h.ss) #burn severity is sig predictor (p=0.0233)
 
 #unit, horizon, samplesev, trt 
-mod.u.h.ss.t <- lmer(percN~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.t <- lmer(cleanN~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.t) #trt still not sig predictor
 
 ##interactions 2-way 
-mod.u.h.2.ss.t <- lmer(percN~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.2.ss.t) #2-way interaction between unit and horizon (p=1.88e-6) 
+mod.u.h.2.ss.t <- lmer(cleanN~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.2.ss.t) #2-way interaction between unit and horizon (p=3.586e-6) 
 
-mod.u.ss.2.h.t <- lmer(percN~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.ss.2.h.t <- lmer(cleanN~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.ss.2.h.t) #no 2-way interaction of unit and samplesev 
 
-mod.u.t.2.ss.h <- lmer(percN~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.t.2.ss.h <- lmer(cleanN~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.t.2.ss.h) #no Unit*Trt
 
-mod.u.h.ss.2.t <- lmer(percN~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.2.t) #Horizon*SampleSev 
+mod.u.h.ss.2.t <- lmer(cleanN~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.ss.2.t) #Horizon*SampleSev  * (p=0.022)
 
-mod.u.h.t.2.ss <- lmer(percN~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.t.2.ss <- lmer(cleanN~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.t.2.ss) #no Horizon*Trt 
 
-mod.u.h.ss.t.2 <- lmer(percN~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.t.2 <- lmer(cleanN~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.t.2) #no SampleSev*Trt
 
-mod.u.h.2.ss.2.t <- lmer(percN~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.2.ss.2.t <- lmer(cleanN~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.2.ss.2.t) #unit*horizon and horizon*SampleSev sig
 
 ##interactions 3-way 
-mod.u.h.ss.3.t <-lmer(percN~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
+mod.u.h.ss.3.t <-lmer(cleanN~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
 anova(mod.u.h.ss.3.t) #no unit*horizon*samplesev
 
 #from forward model selection appears that Unit*Horizon+Horizon*SampleSev+Trt is the best fit model
 
 anova(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.h, mod.u.h.t, mod.u.h.ss, mod.u.h.ss.t, mod.u.h.2.ss.t, mod.u.ss.2.h.t, mod.u.t.2.ss.h, mod.u.h.ss.2.t, mod.u.h.t.2.ss, mod.u.h.ss.t.2, mod.u.h.2.ss.2.t, mod.u.h.ss.3.t) 
-#model with lowest AIC: Unit*Horizon+Horizon*SampleSev+Trt (-136.2) 
-#model with 2nd lowest AIC: Unit*Horizon*SampleSev+Trt (130.0) 
-#3rd lowest AIC: Unit\*Horizon+SampleSev+Trt (-127.0)
+#model with lowest AIC: Unit*Horizon+Horizon*SampleSev+Trt (-72.877) 
+#model with 2nd lowest AIC: Unit*Horizon*SampleSev+Trt (-66.842) 
+#3rd lowest AIC: Unit*Horizon*SampleSev+Trt (-64.782)
 
-#lowest BIC: Unit*Horizon+SampleSev+Trt (-79.3) 
-#2nd lowest BIC: Unit*Horizon+Horizon\*SampleSev+Trt (-77.4) 
-#3rd lowest BIC: Unit+Horizon (-74.7)
+#lowest BIC: Unit*Horizon+SampleSev+Trt (-19.314) 
+#2nd lowest BIC: Unit+Horizon (-17.362)
+#3rd lowest BIC: Unit*Horizon+Horizon*SampleSev+Trt (-14.381)
 
 #%N model selected is Unit*Horizon+Horizon*SampleSev+Trt 
 finalmod.N <- mod.u.h.2.ss.2.t 
@@ -617,97 +621,97 @@ rm(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mo
 
 ```{r}
 #Forwards model selection #Horizon 
-mod.hor <- lmer(CStock ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.hor) #
+
+#NOTE: there is no significance of Horizon since only the mineral horizon has data on C stocks
+
+#NOTE: here we have the same bulk density for the 3 replicates, so we should really take the average of the C stock for the replicates and only have 1 value for the Plot. This would remove the need to have the nested design of the random effect (1|Plot_Name/Rep) and we wouldn't need a random effect
+
+temp <- df.noUB %>%
+  filter(Horizon=="M") %>%
+  group_by(Plot_Name) %>%
+  summarise(meanCstock_gcm2=mean(Cstock_gcm2), .groups="drop")
+temp2 <- filter(df.noUB, Horizon=="M")
+Cstock_df.noUB <- left_join(temp, temp2) %>%
+  distinct(Plot_Name, .keep_all = TRUE)
 
 #Unit 
-mod.unit <- lmer(CStock~Unit + (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.unit) #
+mod.unit <- lm(Cstock_gcm2~Unit, data=Cstock_df.noUB)
+anova(mod.unit) # ** p=0.001032
 
 #Soil subgroup 
-mod.soil <- lmer(CStock~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.soil) #
+mod.soil <- lm(Cstock_gcm2~Soil_Subgroup, data=Cstock_df.noUB) 
+anova(mod.soil) # ** p=0.008824
 
 #Sample severity 
-mod.sev <-lmer(CStock~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.sev) #
+mod.sev <-lm(Cstock_gcm2~SampleSev, data=Cstock_df.noUB) 
+anova(mod.sev) # SampleSev not significant (p=0.903)
 
 #VegType 
-mod.veg <- lmer(CStock~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.veg) #
+mod.veg <- lm(Cstock_gcm2~Veg_Type, data=Cstock_df.noUB) 
+anova(mod.veg) # * p=0.0353
 
 #Trt 
-mod.trt <- lmer(CStock~Trt + (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.trt) # 
+mod.trt <- lm(Cstock_gcm2~Trt, data=Cstock_df.noUB)
+anova(mod.trt) # Trt not significant (p=0.396)
 
 #unit and soil subgroup 
-mod.u.sg <- lmer(CStock~Unit+Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.sg) #when accounting for unit, soil type 
+mod.u.sg <- lm(Cstock_gcm2~Unit+Soil_Subgroup, data=Cstock_df.noUB) 
+anova(mod.u.sg) #when accounting for unit, soil type is only marginally significant (p=0.095)
 
-#unit and veg type 
-mod.u.v <- lmer(CStock~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.v) #when accounting for unit, veg type 
+#unit and veg type
+mod.u.v <- lm(Cstock_gcm2~Unit+Veg_Type, data=Cstock_df.noUB) 
+anova(mod.u.v) #when accounting for unit, veg type is no longer significant
 
-#unit and horizon 
-mod.u.h <-lmer(CStock~Unit+Horizon+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h) #
+#unit and trt 
+mod.u.t <- lm(Cstock_gcm2~Unit+Trt, data=Cstock_df.noUB) 
+anova(mod.u.t) # Trt is not significant
 
-#unit, horizon, trt 
-mod.u.h.t <- lmer(CStock~Unit+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.t) #
+#unit, and samplesev 
+mod.u.ss <- lm(Cstock_gcm2~Unit+SampleSev, data=Cstock_df.noUB)
+anova(mod.u.ss) # Sample Severity is still not significant
 
-#unit, horizon, samplesev 
-mod.u.h.ss <- lmer(CStock~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.u.h.ss) #
+#unit, samplesev, trt 
+mod.u.ss.t <- lm(Cstock_gcm2~Unit+SampleSev+Trt, data=Cstock_df.noUB) 
+anova(mod.u.ss.t) # Only unit is significant (p=0.00169) 
 
-#unit, horizon, samplesev, trt 
-mod.u.h.ss.t <- lmer(CStock~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.t) #
+#NOTE: since only unit is significant in predicting C stock, we don't need to look for 2 way interactions, but just for the sake of a thorough model selection we'll check.
 
 ##interactions 2-way 
-mod.u.h.2.ss.t <- lmer(CStock~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.2.ss.t) #2-way interaction between unit and horizon 
+mod.u.ss.2.t <- lm(Cstock_gcm2~Unit*SampleSev+Trt, data=Cstock_df.noUB) 
+anova(mod.u.ss.2.t) #no 2 way interaction between unit and samplesev
 
-mod.u.ss.2.h.t <- lmer(CStock~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.ss.2.h.t) #2-way interaction of unit and samplesev 
+mod.u.t.2.ss <- lm(Cstock_gcm2~Unit*Trt+SampleSev, data=Cstock_df.noUB) 
+anova(mod.u.t.2.ss) #no Unit*Trt interaction
 
-mod.u.t.2.ss.h <- lmer(CStock~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.t.2.ss.h) #Unit*Trt
-
-mod.u.h.ss.2.t <- lmer(CStock~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.2.t) #Horizon*SampleSev 
-
-mod.u.h.t.2.ss <- lmer(CStock~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.t.2.ss) #Horizon*Trt 
-
-mod.u.h.ss.t.2 <- lmer(CStock~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.t.2) #SampleSev*Trt
-
-mod.u.h.2.ss.2.t <- lmer(CStock~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.2.ss.2.t) #unit*horizon and horizon*SampleSev 
+mod.u.ss.t.2 <- lm(Cstock_gcm2~Unit+SampleSev*Trt, data=Cstock_df.noUB) 
+anova(mod.u.ss.t.2) #no SampleSev*Trt interaction
 
 ##interactions 3-way 
-mod.u.h.ss.3.t <-lmer(CStock~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.3.t) #unit*horizon*samplesev
+mod.u.ss.t.3 <-lm(Cstock_gcm2~Unit*SampleSev*Trt, data=Cstock_df.noUB) 
+anova(mod.u.ss.t.3) #no unit*samplesev*Trt interaction
 
-#from forward model selection appears that ___________ is the best fit model
+#from forward model selection appears that mod.u.ss.t (Unit+SampleSev+Trt) is the best fit model
 
-anova(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.h, mod.u.h.t, mod.u.h.ss, mod.u.h.ss.t, mod.u.h.2.ss.t, mod.u.ss.2.h.t, mod.u.t.2.ss.h, mod.u.h.ss.2.t, mod.u.h.t.2.ss, mod.u.h.ss.t.2, mod.u.h.2.ss.2.t, mod.u.h.ss.3.t) 
-#model with lowest AIC: 
-#model with 2nd lowest AIC: 
-#3rd lowest AIC: 
+aic.results <- AIC(mod.unit, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.ss.t, mod.u.ss.2.t, mod.u.t.2.ss, mod.u.ss.t.2, mod.u.ss.t.3) 
+aic.results
+#model with lowest AIC: mod.unit (187.32)
+#model with 2nd lowest AIC: mod.soil (190.29)
+#3rd lowest AIC: mod.u.ss.t (191.6159)
 
-#lowest BIC: 
-#2nd lowest BIC:  
-#3rd lowest BIC: 
+bic.results <- BIC(mod.unit, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.ss.t, mod.u.ss.2.t, mod.u.t.2.ss, mod.u.ss.t.2, mod.u.ss.t.3) 
+bic.results
 
-#%N model selected is Unit*Horizon+Horizon*SampleSev+Trt 
-finalmod.CStock <- mod.u.h.2.ss.2.t 
-rm(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.h, mod.u.h.t, mod.u.h.ss, mod.u.h.ss.t, mod.u.h.2.ss.t, mod.u.ss.2.h.t, mod.u.t.2.ss.h, mod.u.h.ss.2.t, mod.u.h.t.2.ss, mod.u.h.ss.t.2, mod.u.h.ss.3.t)
+#lowest BIC: mod.unit (192.65)
+#2nd lowest BIC:  mod.u.sg (195.87)
+#3rd lowest BIC: mod.soil (199.62)
+
+#%N model selected is Unit+SampleSev+Trt
+finalmod.CStock <- mod.u.ss.t 
+rm(mod.unit, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.ss.t, mod.u.ss.2.t, mod.u.t.2.ss, mod.u.ss.2.t, mod.u.ss.t.3, aic.results, bic.results)
 
 ```
 
-### N stock model selection
+### N stock model selection (not done because no N stock calculated)
 
 ```{r}
 #Forwards model selection #Horizon 
@@ -804,141 +808,148 @@ rm(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mo
 
 ```{r}
 #Forwards model selection #Horizon 
-mod.hor <- lmer(CNratio ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.hor) #
+mod.hor <- lmer(C_N ~ Horizon + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.hor) # *** p<2.2e-16
 
 #Unit 
-mod.unit <- lmer(CNratio~Unit + (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.unit) #
+mod.unit <- lmer(C_N~Unit + (1|Plot_Name/Rep), data=df.noUB)
+anova(mod.unit) # * p=0.0216
 
 #Soil subgroup 
-mod.soil <- lmer(CNratio~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.soil) #
+mod.soil <- lmer(C_N~Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.soil) # * p=0.026
 
 #Sample severity 
-mod.sev <-lmer(CNratio~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.sev) #
+mod.sev <-lmer(C_N~SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.sev) # * p=0.0299
 
 #VegType 
-mod.veg <- lmer(CNratio~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.veg) #
+mod.veg <- lmer(C_N~Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.veg) # * 0.01227
 
 #Trt 
-mod.trt <- lmer(CNratio~Trt + (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.trt) # 
+mod.trt <- lmer(C_N~Trt + (1|Plot_Name/Rep), data=df.noUB)
+anova(mod.trt) # not sig p=0.74
 
 #unit and soil subgroup 
-mod.u.sg <- lmer(CNratio~Unit+Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.sg) #when accounting for unit, soil type 
+mod.u.sg <- lmer(C_N~Unit+Soil_Subgroup + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.sg) #when accounting for unit, soil type bot are no longer significant (p=0.501 and p=0.147, respectively)! 
 
 #unit and veg type 
-mod.u.v <- lmer(CNratio~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.v) #when accounting for unit, veg type 
+mod.u.v <- lmer(C_N~Unit+Veg_Type + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.v) #when accounting for unit, veg type is still significant (p=0.001704 and p=0.000915, respectively)
 
 #unit and horizon 
-mod.u.h <-lmer(CNratio~Unit+Horizon+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h) #
+mod.u.h <-lmer(C_N~Unit+Horizon+ (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h) # both unit and Horizon are significant (p=0.019 and p<2e-16, respectively)
 
 #unit, horizon, trt 
-mod.u.h.t <- lmer(CNratio~Unit+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.t) #
+mod.u.h.t <- lmer(C_N~Unit+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.t) # Trt not sig
 
 #unit, horizon, samplesev 
-mod.u.h.ss <- lmer(CNratio~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
-anova(mod.u.h.ss) #
+mod.u.h.ss <- lmer(C_N~Unit+Horizon+SampleSev+ (1|Plot_Name/Rep), data=df.noUB)
+anova(mod.u.h.ss) # SampleSev is significant (p=0.0104) but drops sig of Unit to marginal (p=0.073)
 
 #unit, horizon, samplesev, trt 
-mod.u.h.ss.t <- lmer(CNratio~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.t) #
+mod.u.h.ss.t <- lmer(C_N~Unit+Horizon+SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.ss.t) #Trt still not sig
 
 ##interactions 2-way 
-mod.u.h.2.ss.t <- lmer(CNratio~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.2.ss.t) #2-way interaction between unit and horizon 
+mod.u.h.2.ss.t <- lmer(C_N~Unit*Horizon+SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.2.ss.t) #2-way interaction between unit and horizon  (p3.9e-06), Trt still not significant
 
-mod.u.ss.2.h.t <- lmer(CNratio~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.ss.2.h.t) #2-way interaction of unit and samplesev 
+mod.u.ss.2.h.t <- lmer(C_N~Unit*SampleSev+Horizon+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.ss.2.h.t) # no unit*samplesev
 
-mod.u.t.2.ss.h <- lmer(CNratio~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.t.2.ss.h) #Unit*Trt
+mod.u.t.2.ss.h <- lmer(C_N~Unit*Trt+SampleSev+Horizon + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.t.2.ss.h) # no Unit*Trt
 
-mod.u.h.ss.2.t <- lmer(CNratio~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.2.t) #Horizon*SampleSev 
+mod.u.h.ss.2.t <- lmer(C_N~Unit+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.ss.2.t) # Horizon*SampleSev significant (p=0.000582)
 
-mod.u.h.t.2.ss <- lmer(CNratio~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.t.2.ss) #Horizon*Trt 
+mod.u.h.t.2.ss <- lmer(C_N~Unit+Horizon*Trt+SampleSev + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.t.2.ss) # no Horizon*Trt 
 
-mod.u.h.ss.t.2 <- lmer(CNratio~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.t.2) #SampleSev*Trt
+mod.u.h.ss.t.2 <- lmer(C_N~Unit+Horizon+SampleSev*Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.ss.t.2) # no SampleSev*Trt
 
-mod.u.h.2.ss.2.t <- lmer(CNratio~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.2.ss.2.t) #unit*horizon and horizon*SampleSev 
+mod.u.h.2.ss.2.t <- lmer(C_N~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.2.ss.2.t) #unit*horizon and horizon*SampleSev both still significant 
 
 ##interactions 3-way 
-mod.u.h.ss.3.t <-lmer(CNratio~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
-anova(mod.u.h.ss.3.t) #unit*horizon*samplesev
+mod.u.h.ss.3.t <-lmer(C_N~Unit*Horizon*SampleSev+Trt+ (1|Plot_Name/Rep), data=df.noUB) 
+anova(mod.u.h.ss.3.t) # marginally sig unit*horizon*samplesev (p=0.063)
 
-#from forward model selection appears that ___________ is the best fit model
+#from forward model selection appears that mod.u.h.2.ss.2.t (Unit*Horizon+Horizon*SampleSev+Trt) is the best fit model
 
 anova(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.h, mod.u.h.t, mod.u.h.ss, mod.u.h.ss.t, mod.u.h.2.ss.t, mod.u.ss.2.h.t, mod.u.t.2.ss.h, mod.u.h.ss.2.t, mod.u.h.t.2.ss, mod.u.h.ss.t.2, mod.u.h.2.ss.2.t, mod.u.h.ss.3.t) 
-#model with lowest AIC: 
-#model with 2nd lowest AIC: 
-#3rd lowest AIC: 
+#model with lowest AIC: mod.u.h.2.ss.2.t (Unit*Horizon+Horizon*SampleSev+Trt) (2098.1)
+#model with 2nd lowest AIC: mod.u.h.ss.3.t  (Unit*Horizon*SampleSev+Trt) (2099.9)
+#3rd lowest AIC: mod.u.h.2.ss.t (Unit*Horizon+SampleSev+Trt) (2107.4)
 
-#lowest BIC: 
-#2nd lowest BIC:  
-#3rd lowest BIC: 
+#lowest BIC: mod.u.h.2.ss.t (Unit*Horizon+SampleSev+Trt) (2155.0)
+#2nd lowest BIC: mod.hor (Horizon) (2155.4)
+#3rd lowest BIC: mod.u.h.2.ss.2.t (Unit*Horizon+Horizon*SampleSev+Trt) (2156.6)
 
-#%N model selected is Unit*Horizon+Horizon*SampleSev+Trt 
-finalmod.CNratio <- mod.u.h.2.ss.2.t 
+#CN model selected is EITHER Unit*Horizon+Horizon*SampleSev+Trt 
+finalmod.CNratio1 <- mod.u.h.2.ss.2.t 
+finalmod.CNratio2 <- mod.u.h.2.ss.t
 rm(mod.unit, mod.hor, mod.soil, mod.sev, mod.veg, mod.trt, mod.u.sg, mod.u.v, mod.u.h, mod.u.h.t, mod.u.h.ss, mod.u.h.ss.t, mod.u.h.2.ss.t, mod.u.ss.2.h.t, mod.u.t.2.ss.h, mod.u.h.ss.2.t, mod.u.h.t.2.ss, mod.u.h.ss.t.2, mod.u.h.ss.3.t)
 ```
 
 ##Final Models
-
+###Print anova tables of the final models to the Figures/CN folder
 ```{r}
 #%C final model 
-finalmod.C <- mod.u.h.2.ss.2.t 
+finalmod.C <- lmer(cleanC~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 aov3C <- anova(finalmod.C) 
 #unit, horizon, samplesev, unit*horizon & horizon*samplesev are sig predictors of %C
 
-write.csv(aov3C, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Cmodel_aov3table.csv")
+#write.csv(aov3C, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cmodel_aov3table.csv")
 
 r.squaredGLMM(finalmod.C) 
-#marginal (variance explained by fixed): 0.513; conditional (variance explained by both fixed and random): 0.562
+#marginal (variance explained by fixed): 0.478; conditional (variance explained by both fixed and random): 0.522
 
 #%N final model 
-finalmod.N <- mod.u.h.2.ss.2.t 
+finalmod.N <- lmer(cleanN~Unit*Horizon+Horizon*SampleSev+Trt + (1|Plot_Name/Rep), data=df.noUB) 
 aov3N <- anova(finalmod.N) 
 
-r.squaredGLMM(finalmod.N) #marginal: 0.549; conditional: 0.615
+r.squaredGLMM(finalmod.N) #marginal: 0.523; conditional: 0.615
 
-write.csv(aov3N, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Nmodel_aov3table.csv")
+#write.csv(aov3N, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Nmodel_aov3table.csv")
 
 #C stock final model
+finalmod.CStock <- lm(Cstock_gcm2~Unit+SampleSev+Trt, data=Cstock_df.noUB)
 aov3Cstock <-anova(finalmod.CStock)
+aov3Cstock
 
-write.csv(aov3Cstock, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Cstockmodel_aov3table.csv")
+write.csv(aov3Cstock, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cstockmodel_aov3table.csv")
 
-r.squaredGLMM(finalmod.Cstock) #
+r.squaredGLMM(finalmod.CStock) #marginal&conditional: 0.432
 
-#N stock final model
-aov3Nstock <-anova(finalmod.NStock)
+#NOT USED: N stock final model
+#aov3Nstock <-anova(finalmod.NStock)
 
-write.csv(aov3Nstock, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Nstockmodel_aov3table.csv")
+#write.csv(aov3Nstock, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Nstockmodel_aov3table.csv")
 
-r.squaredGLMM(finalmod.Nstock) #
+#r.squaredGLMM(finalmod.Nstock) #
 
 #C:N final model
-aov3CN <-anova(finalmod.CNratio)
+aov3CN <-anova(finalmod.CNratio1)
+#write.csv(aov3CN, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/CNmodel1_aov3table.csv")
 
-write.csv(aov3CN, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CNmodel_aov3table.csv")
 
-r.squaredGLMM(finalmod.CNratio) #
+aov3CN <- anova(finalmod.CNratio2)
+#write.csv(aov3CN, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/CNmodel2_aov3table.csv")
+
+r.squaredGLMM(finalmod.CNratio1) #marginal:0.399, conditional: 0.4357
+r.squaredGLMM(finalmod.CNratio2) #marginal: 0.368, conditional: 0.4057
 
 ```
 
 ###Contrasts on final models
-
+% Carbon
 ```{r}
 ############ %C contrasts
 
@@ -950,7 +961,7 @@ t <- as.data.frame(con.trt$contrasts) %>%
 
 #burn severity contrasts 
 con.samplesevbyhorizon <-emmeans(finalmod.C, pairwise~SampleSev|Horizon) 
-con.samplesevbyhorizon #Mineral horizons no sig difference by burn severity #Organic horizons: 1&2 < 3&4 
+con.samplesevbyhorizon #Mineral horizons no sig difference by burn severity #Organic horizons: 1&2 (marginaly p=0.059), 1&3 (p=0.0002), 1&4 (p=0.0014), 2&3 (p=0.0147) 
 ss.by.h <- as.data.frame(con.samplesevbyhorizon$contrasts) %>% 
   mutate(., SampleSev=NA, Unit=NA)
 
@@ -959,13 +970,13 @@ ss.by.h <- as.data.frame(con.samplesevbyhorizon$contrasts) %>%
 #test <- emmeans(mod.u.h.ss.3.t, pairwise~SampleSev|Unit+Horizon)
 #test #mineral horizons no sig diff by burn severity; #O: BL no sig diff; H: 1 >2 & 1>4, but 1=3; WV: 2>3&4
 
-con.horbyunitsamplesev <- emmeans(mod.u.h.2.ss.2.t, pairwise~Horizon|Unit+SampleSev) 
+con.horbyunitsamplesev <- emmeans(finalmod.C, pairwise~Horizon|Unit+SampleSev) 
 con.horbyunitsamplesev # O %C \> M %C except in burn sev class 4 in Butte Lake where O & M %C are equal
 h.by.ss <- as.data.frame(con.horbyunitsamplesev$contrasts) %>%
   mutate(., Horizon=NA)
 
-con.unitbyhorizon <-emmeans(mod.u.h.2.ss.2.t, pairwise~Unit|Horizon)
-con.unitbyhorizon # Mineral: BL & H \<\< WV; Organic: BL \< H \< WV
+con.unitbyhorizon <-emmeans(finalmod.C, pairwise~Unit|Horizon)
+con.unitbyhorizon # Mineral: BL & H (marginally,p=.05 in O horizon and 0.40 in M horizon), BL&WV (Organic p<0.0001; Mineral (0.0001)), H&WV (Organic p=0.0005, Mineral marginally p=0.059)
 u.by.h <- as.data.frame(con.unitbyhorizon$contrasts) %>% 
   mutate(., Unit=NA, SampleSev=NA)
 
@@ -974,13 +985,13 @@ con.df <- rbind(ss.by.h, h.by.ss)
 con.df <- rbind(con.df, u.by.h) 
 con.df <- rbind(con.df, t)
 
-write.csv(con.df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Cmodel_contrasts.csv")
+write.csv(con.df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cmodel_contrasts.csv")
 rm(con.horbyunitsamplesev, con.all.df, con.trt.df, con.unit.df, con.samplesevbyunithor, con.trt, con.unitbyhorizon, t, ss.by.u.h, h.by.ss, u.by.h)
 
 C.con.df <- con.df 
 rm(con.df)
 ```
-
+% Nitrogen
 ```{r}
 ############ %N Contrasts
 
@@ -992,7 +1003,7 @@ t <- as.data.frame(con.trt$contrasts) %>%
 
 con.samplesevbyhor <-emmeans(finalmod.N, pairwise~SampleSev|Horizon)
 con.samplesevbyhor #Mineral horizons no sig difference by burn severity
-#Organic horizons: 2 \< 3&4; 1 is not different than 2, 3 or 4. This is strange. 
+#Organic horizons: 2&3 (p=0.0004), 2&4 (p=0.0455), 1&3 marginal (p=0.0781). It's strange that unburned is not different than burned
 ss.by.h <- as.data.frame(con.samplesevbyhor$contrasts) %>%
   mutate(., SampleSev=NA, Unit=NA)
 
@@ -1007,12 +1018,13 @@ ss.by.h <- as.data.frame(con.samplesevbyhor$contrasts) %>%
 #test2 #Error in crossprod(nbasis, x): "crossprod" is not a BUILTIN function
 
 con.horbyunitsamplesev <- emmeans(finalmod.N, pairwise~Horizon|Unit+SampleSev) 
-con.horbyunitsamplesev # O %N \> M %N # no difference in O & M %N: BL severity 1, BL severity 3, #H severity 3, BL severity 4, H severity 4
+con.horbyunitsamplesev # O %N > M %N 
+# O & M %N sig different: BL severity 1 & 2, #H severity 1 & 2, #WV severity 1,2,3,and4
 h.by.ss <- as.data.frame(con.horbyunitsamplesev$contrasts) %>% 
   mutate(., Horizon=NA)
 
 con.unitbyhorizon <-emmeans(finalmod.N, pairwise~Unit|Horizon)
-con.unitbyhorizon # Mineral: BL & H \<\< WV; Organic: BL \< H \< WV
+con.unitbyhorizon # Mineral: BL & H < WV; Organic: BL&H < WV
 u.by.h <- as.data.frame(con.unitbyhorizon$contrasts) %>% 
   mutate(., Unit=NA, SampleSev=NA)
 
@@ -1021,14 +1033,71 @@ con.df <- rbind(ss.by.h, h.by.ss)
 con.df <- rbind(con.df, u.by.h) 
 con.df <- rbind(con.df, t)
 
-write.csv(con.df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/Nmodel_contrasts.csv")
+write.csv(con.df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Nmodel_contrasts.csv")
+rm(con.horbyunitsamplesev, con.all.df, con.trt.df, con.unit.df, con.samplesevbyunithor, con.trt, con.unitbyhorizon, t, ss.by.u.h, h.by.ss, u.by.h)
+
+N.con.df <- con.df 
+rm(con.df)
+```
+Carbon Stocks
+```{r}
+############ Carbon Stocks Contrasts
+
+###post hoc test on final model 
+con.trt <- emmeans(finalmod.CStock, pairwise~Trt) 
+con.trt #trt is not sig diff
+t <- as.data.frame(con.trt$contrasts)
+
+con.samplesev <-emmeans(finalmod.CStock, pairwise~SampleSev)
+con.samplesev #sample severity is not sig diff
+ss <- as.data.frame(con.samplesev$contrasts)
+
+
+con.unit <-emmeans(finalmod.N, pairwise~Unit)
+con.unit # Mineral: BL & H < WV; Organic: BL&H < WV
+u <- as.data.frame(con.unit$contrasts)
+
+#bind together relevant contrasts 
+con.df <- rbind(ss, u)
+con.df <- rbind(con.df, t) 
+
+write.csv(con.df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cstockmodel_contrasts.csv")
 rm(con.horbyunitsamplesev, con.all.df, con.trt.df, con.unit.df, con.samplesevbyunithor, con.trt, con.unitbyhorizon, t, ss.by.u.h, h.by.ss, u.by.h)
 
 N.con.df <- con.df 
 rm(con.df)
 ```
 
-### Analyses including all samples (C above and N below detection)
+C:N Ratio
+```{r}
+############ Carbon:Nitrogen Contrasts
+
+###post hoc test on final model 
+con.trt <- emmeans(finalmod.CStock, pairwise~Trt) 
+con.trt #trt is not sig diff
+t <- as.data.frame(con.trt$contrasts)
+
+con.samplesev <-emmeans(finalmod.CStock, pairwise~SampleSev)
+con.samplesev #sample severity is not sig diff
+ss <- as.data.frame(con.samplesev$contrasts)
+
+
+con.unit <-emmeans(finalmod.N, pairwise~Unit)
+con.unit # Mineral: BL & H < WV; Organic: BL&H < WV
+u <- as.data.frame(con.unit$contrasts)
+
+#bind together relevant contrasts 
+con.df <- rbind(ss, u)
+con.df <- rbind(con.df, t) 
+
+write.csv(con.df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cstockmodel_contrasts.csv")
+rm(con.horbyunitsamplesev, con.all.df, con.trt.df, con.unit.df, con.samplesevbyunithor, con.trt, con.unitbyhorizon, t, ss.by.u.h, h.by.ss, u.by.h)
+
+N.con.df <- con.df 
+rm(con.df)
+```
+
+## Analyses including all samples (C above and N below detection)
 
 ```{r}
 ################ Z Analyses including all Samples (C above and N below detection)
