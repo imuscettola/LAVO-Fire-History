@@ -91,7 +91,7 @@ d <- ggplot(texture, aes(Site, Clay_perc)) +geom_boxplot()
 
 b+c+d
 
-ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/bulkdensity/SandSiltClaypec_byUnit.png", width=5, height=3)
+#ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/bulkdensity/SandSiltClaypec_byUnit.png", width=5, height=3)
 ```
 
 # Summary Tables 
@@ -152,27 +152,26 @@ write.csv(final_summary, paste0(path, "Figures/bulkdensity/bd_texture_summary.cs
 
 ```{r}
 temp1 <- select(texture, Core.ID, Sand_perc:Texture_Name)
-temp2 <- select(bulkdensity, Core.ID, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., totalcorebd_gcm3:bdof2mmfraction_gcm3)
+temp2 <- select(bulkdensity, Core.ID, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., Average.Height..cm., totalcorebd_gcm3:bdof2mmfraction_gcm3)
+
+bd_texture <- left_join(temp1, temp2, by="Core.ID")
 
 write.csv(bd_texture, paste0(path, "Data/R/bulkdensity_texture.csv"), row.names=FALSE)
 
 #latest metadata with pH, soil taxonomy from remote survey, C/N, burn severity, and DNA sequencing information
     metadata <- read.csv(paste0(path, "Data/R/202607_LAVO22_Metadata.csv"))
 
-newmetadata <- metadata %>%
-  left_join(bd_texture, by = c("Plot_Name" = "Core.ID"))
-  
   newmetadata <- metadata %>%
   left_join(bd_texture, by = c("Plot_Name" = "Core.ID")) %>%
   mutate(
-    across(c(Sand_perc, Silt_perc, Clay_perc, Texture_Name, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., totalcorebd_gcm3, volume2mmfraction_cm3, bdof2mmfraction_gcm3),
+    across(c(Sand_perc, Silt_perc, Clay_perc, Texture_Name, Mass.of..2mm.fraction..g., Mass.of.rocks.g., Volume.of.rocks..mL., Average.Height..cm., totalcorebd_gcm3, volume2mmfraction_cm3, bdof2mmfraction_gcm3),
       ~ if_else(str_ends(Full_Sample_Name, "M"), ., NA)
     )
   ) %>%
-    select(., Plot_Name:Texture_Name, Volume.of.rocks..mL., bdof2mmfraction_gcm3)
+    select(., Plot_Name:Texture_Name, Volume.of.rocks..mL., Average.Height..cm., bdof2mmfraction_gcm3)
 
 
-write.csv(newmetadata, paste0(path, "Data/R/20260724_LAVO22_Metadata.csv"), row.names=FALSE)
+#write.csv(newmetadata, paste0(path, "Data/R/20260724_LAVO22_Metadata.csv"), row.names=FALSE)
 
 ```
 
@@ -236,6 +235,16 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 #c <- ggplot(temp, aes(bdof2mmfraction_gcm3, Volume.of.rocks..mL./totalcorevolume_cm3*100)) + geom_point(aes(color=factor(Soil_mu))) + geom_smooth(method = "lm", se=TRUE)
 #c
     
+```
+
+
+# Calculate C Stocks
+```{r}
+metadata <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/20260724_LAVO22_Metadata.csv")
+
+metadata <- mutate(metadata, Cstock_gcm2 = cleanC*bdof2mmfraction_gcm3*Average.Height..cm.)
+
+#write.csv(metadata, paste0(path, "Data/R/20260724_LAVO22_Metadata.csv"))
 ```
 
 
