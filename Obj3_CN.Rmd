@@ -43,22 +43,31 @@ path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
     CN2 <-read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/RAW/Whitman Muscettola CN 032824.csv")
     CN1 <-read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/RAW/Whitman Muscettola CN 051424.csv")
     CN3 <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/RAW/CN results for LAV022 Elm.csv")
+    CN4 <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/RAW/CN results Emily Kaufman and Isabella Muscetola 032026.csv")
 
     #add column with analysis date and run number
     CN2$Date <- 20240328
     CN1$Date <- 20240514
     CN3$Date <- 20250809
+    CN4$Date <-202603
     CN2$Run <- 1
     CN1$Run <- 1
     CN3$Run <- 2
+    CN4$Run <- 3
 
     #add Notes column to CN3
     CN3$Notes <- ""
+    CN4 <- rename(CN4, Notes = Issue)
+    
+    #fix data type of CN4 from character to double
+    CN4$X.N <- as.numeric(CN4$X.N)
+    CN4$X.C <- as.numeric(CN4$X.C)
 
-    #merge two datasets from EA analysis runs 1 and 2 
+    #merge datasets from EA analysis runs 1, 2, and 3 
     temp <- rbind(CN1, CN2)
-    CN <- bind_rows(temp, CN3)
-    rm(temp)
+    temp2 <- bind_rows(temp, CN3)
+    CN <- bind_rows(temp2, CN4)
+    rm(temp, temp2)
 
     #rename column X.N and X.C to percN and percC
     CN <- CN %>%
@@ -72,17 +81,18 @@ path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
     NA, ifelse(Notes=="CN below detection limit", NA, percC)))
 
     #separate out samples that were rerun 
-    rerunsamples <- CN |> group_by(Sample.Name) |> filter(n()>1) |> ungroup()
+    #rerunsamples <- CN |> group_by(Sample.Name) |> filter(n()>1) |> ungroup()
     
-    write.csv(rerunsamples, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_rerunsamples.csv")
+    #write.csv(rerunsamples, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_rerunsamples.csv")
     
 
     #what were the issues with the samples that needed to be rerun?
-    temp <- CN %>% 
-      group_by(Notes) %>% 
-      summarise(count=n()) 
-    rm(temp)
+    #temp <- CN %>% 
+    #  group_by(Notes) %>% 
+    #  summarise(count=n()) 
+    #rm(temp)
 
+    #save CN merged dataframe
     write.csv(CN,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_allruns_merged.csv")
     
 
@@ -90,8 +100,10 @@ path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
     
 #NOTE: 2 errors in sample name was identified in the QA/QC - corrections were made to the csv and file was named "CN_allruns_merged_corrected.csv" this merged csv should be used for subsequent analyses.
     
-    CN <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_allruns_merged_corrected.csv")
+    #CN <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_allruns_merged_corrected.csv")
 
+#above QA/QC correction was added by using 2026 run C/N data. 
+    CN <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_allruns_merged.csv")
 
     CN_tidy <- CN %>%
   group_by(Sample.Name) %>%
@@ -117,7 +129,7 @@ path <- "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/"
     
     write.csv(CN_tidy, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_merged_final.csv")
     
-rm(CN1, CN2, CN3, temp, CN, rerunsamples)
+rm(CN1, CN2, CN3, CN4, temp, CN, rerunsamples)
 ```
 
 #### Add C/N concentrations to metadata dataframe
@@ -129,43 +141,15 @@ rm(CN1, CN2, CN3, temp, CN, rerunsamples)
     CN_tidy <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/CN_merged_final.csv")
     
       
-    newmetadata <- left_join(metadata, CN_tidy[, 2:6], by=c("Full_Sample_Name" = "Sample.Name")) %>%
+    newmetadata <- left_join(metadata, CN_tidy, by=c("Full_Sample_Name" = "Sample.Name")) %>%
       mutate(., Plot_Horizon = paste(Plot_Name, Horizon, sep="_"))
       #includes a column for both the plot and horizon (this is useful when looking at similarity of soil core characteristics within the same plot)
     
     #save metadata 
-    write.csv(newmetadata,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
+    write.csv(newmetadata,"C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/202607_LAVO22_Metadata.csv")
     rm(temp, CN1, CN2, CN, metadata)
 ```
 
-### Tidy up metadata
-
-```{r}
-    
-    newmetadata <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/09202025_LAVO22_Metadata.csv")
-
-    #filter data so no duplicates and remove columns pertinent for sequencing 
-    df <- newmetadata %>%
-      filter(startsWith(Run_Submission_Name, "1")) %>%
-      #removes 2nd sequencing run 
-      filter(!endsWith(Run_Submission_Name, "2")) %>% 
-      #removes duplicate samples from sequencing 
-      select(-1, -(3:7), -(15:17), -(23:27))
-      #removes extraneous columns that are related to DNA sequencing
-
-    #set column types 
-    df$Unit <- factor(df$Unit)
-    df$SampleSev <- factor(df$SampleSev, levels = c(1, 2, 3, 4))
-    
-    
-    #filter data to remove unburned unit 
-    df.noUB <- filter(df, Unit!="UB")
-
-    #save dataframes
-    write.csv(df.noUB, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/LAVO22_CN_noUB_metadata.csv")
-    
-    write.csv(df, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/CarbonNitrogen/LAVO22_CN_allunits_metadata.csv")
-```    
 
 ### Which samples are missing Carbon and/or Nitrogen data?
 ```{r}
@@ -226,24 +210,69 @@ df.noUB$SampleSev <- factor(df.noUB$SampleSev, levels = c(1, 2, 3, 4))
 df.noUB$Horizon <- factor(df.noUB$Horizon)
 ```
 
-## Conversion of concentration to stock
+## Tidy Metadata as a dataframe for non-DNA analyses. 
+For example in order to make a graph of %C we must remove the duplicate rows of each sample from the Submission Name. To tidy the dataframe we will also remove the DNA relevant columns such as DNA Extraction Round. This will make subsequent, non-microbial analyses, easier.
 
 ```{r}
-df <- read.csv(paste0(path, "Data/R/CarbonNitrogen/CN_merged_final.csv"))
+#Tidy metadata, remove duplicate DNA sequencing run rows, remove extraneous DNA sequencing data, save dataframe as "df_allsamples_allmeasurements_final.csv" Only need to do once.
+df <- read.csv(paste0(path, "Data/R/20260724_LAVO22_Metadata.csv"))
 
-df <- df %>%
-  mutate(Plot_Name=str_sub(Sample.Name, 1, -4)) %>%
-  #there appears to be a duplicate sample (BL PIJE 04 AM) let's remove one of the reads for a cleaner dataframe. When made into final code and dataframe this will need to be addressed during the "Tidy up metadata" section of code. 
-  filter(!endsWith(Plot_Name,"0")) %>%
-  mutate(Plot_Core=paste0(Plot_Name, str_sub(Sample.Name, -2, -2)))
+temp <- df %>%
+  filter(!str_ends(Submission_Sample_Name, "2")) %>%
+  filter(str_starts(Run_Submission_Name, "1")) %>%
+  select(-(1:7), -(15:17), -(48:49), -58)
 
-### summarize CN for the average of each plot
-CN.df.summary <
+#write.csv(temp, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/df_allsamples_allmeasurements_final.csv", row.names = FALSE)
 
-df.noUB$CStock <- df.noUb$cleanC * df.noUb$bd * (1- df.noUb$CF) *5
-df.noUB$NStock <- df.noUb$cleanC * df.noUb$bd * (1-df.noUb$CF) *5
-df.noUB$CNratio <- df.noUb$cleanC/df.noUb$cleanN
+df <- read.csv("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/df_allsamples_allmeasurements_final.csv")
+
+df.noUB <- filter(df, !Unit=="UB")
+
+#write.csv(df.noUB, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Data/R/df_noUB_allmeasurements_final.csv", row.names = FALSE)
+
 ```
+
+## Summarize Carbon Stocks
+Since only 1 bulk density core was taken at select plots, the 3 replicates (A, B, and C) have the same bulk density but distict C concentrations. One way of dealing with this nested plot design is by taking the average of the 3 replicates for 1 Carbon Stock per plot. In order to do that we must summarize the dataframe by Plot_Horizon
+
+```{r}
+temp <- df %>%
+  group_by(Plot_Horizon) %>%
+  summarise(mean_Cstock_gcm2 = mean(Cstock_gcm2), sd_Cstock_gcm2 = sd(Cstock_gcm2)) %>%
+  filter(str_ends(Plot_Horizon, "M")) %>%
+  filter(!is.na(mean_Cstock_gcm2))
+
+temp2 <- select(df, c(Plot_Horizon, Unit:Horizon, Soil_mu:Slope, Wt_Avg_QuadBS, Veg_Type:Soil_Series, Sand_perc:Texture_Name, Volume.of.rocks..mL.:bdof2mmfraction_gcm3))
+
+Cstock_summary <- left_join(temp2, temp, by="Plot_Horizon") %>%
+  filter(., !is.na(mean_Cstock_gcm2))
+
+#now let's make a dataframe with the Cstock summarized by Unit and Trt
+temp <- df %>%
+  filter(!is.na(Cstock_gcm2)) %>%
+  group_by(Unit, Trt) %>%
+  summarise(mean_Cstock_gcm2=mean(Cstock_gcm2), sd_Cstock_gcm2 = sd(Cstock_gcm2), n=n())
+
+#let's save the dataframe for Manuscript figure
+Cstock_summary <- temp %>%
+  mutate('Carbon Stock g/cm2' = paste0(round(mean_Cstock_gcm2, digits=1), " (±", round(sd_Cstock_gcm2, digits=1), ")")) %>%
+  select(1:2, 5:6)
+
+write.csv(Cstock_summary, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cstock_byunitandtreatment.csv", row.names = FALSE)
+
+#now let's make a dataframe with the Cstock summarized by Unit only
+temp <- df %>%
+  filter(!is.na(Cstock_gcm2)) %>%
+  group_by(Unit) %>%
+  summarise(mean_Cstock_gcm2=mean(Cstock_gcm2), sd_Cstock_gcm2=sd(Cstock_gcm2), n=n())
+
+Cstock_summary <- temp %>%
+  mutate('Carbon Stock g/cm2'=paste0(round(mean_Cstock_gcm2, digits=1), " (±", round(sd_Cstock_gcm2, digits=1), ")")) %>%
+  select(1, 4:5)
+
+write.csv(Cstock_summary, "C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/Cstock_byunit.csv", row.names = FALSE)
+```
+
 
 ## Data Visualization
 
@@ -251,12 +280,12 @@ df.noUB$CNratio <- df.noUb$cleanC/df.noUb$cleanN
 
 ```{r}
 #some data exploration - let's look at % C/N for all units
-N.allunits <- ggplot(df, aes(Unit, cleanN)) + geom_point() + theme_bw() + facet_wrap(~Horizon, scales = "free_y", labeller = as_labeller(c("M"="Mineral", "O"="Organic"))) + geom_boxplot() + theme_bw() + scale_y_continuous(name="% Nitrogen") + scale_x_discrete(name="Unit", labels=c("Butte Lake", "Hole", "Unburned", "Warner Valley"))
+N.allunits <- ggplot(df, aes(Unit, cleanN)) + geom_point() + theme_bw() + facet_wrap(~Horizon, scales = "free_y", labeller = as_labeller(c("M"="Mineral", "O"="Organic"))) + geom_boxplot() + theme_bw() + scale_y_continuous(name="% Nitrogen") + scale_x_discrete(name="Unit", labels=c("Butte Lake", "Hole", "Unburned", "Warner Valley")) + ylim(0, 2) + labs(title="% Nitrogen by Unit and Horizon", y="% Nitrogen")
 N.allunits
 
 ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/percN_allunits.png", plot = N.allunits, width = 10, height = 8, units = "in", dpi = 300)
 
-C.allunits <- ggplot(df, aes(Unit, cleanC)) + geom_point() + theme_bw() + facet_wrap(~Horizon, scales = "free_y", labeller = as_labeller(c("M"="Mineral", "O"="Organic"))) + geom_boxplot() + theme_bw() + scale_y_continuous(name="% Carbon") + scale_x_discrete(name="Unit", labels=c("Butte Lake", "Hole", "Unburned", "Warner Valley"))
+C.allunits <- ggplot(df, aes(Unit, cleanC)) + geom_point() + theme_bw() + facet_wrap(~Horizon, scales = "free_y", labeller = as_labeller(c("M"="Mineral", "O"="Organic"))) + geom_boxplot() + theme_bw() + scale_y_continuous(name="% Carbon") + scale_x_discrete(name="Unit", labels=c("Butte Lake", "Hole", "Unburned", "Warner Valley")) + ylim(0, 52) + labs(title="% Carbon by Unit and Horizon", y="% Carbon")
 C.allunits
 
 ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/percC_allunits.png", plot = C.allunits, width = 10, height = 8, units = "in", dpi = 300)
@@ -264,6 +293,9 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 ```
 
 ```{r}
+df.noUB <- df.noUB %>%
+  mutate(Horizon=factor(Horizon, levels=c("O", "M")))
+
 #visualize Carbon data by treatment faceted by unit and horizon
 C.firehistory <- ggplot(df.noUB, aes(Trt, cleanC, fill=Trt)) 
 C.firehistory <- C.firehistory + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("M"="Mineral", "O"="Organic", "BL"="Butte Lake", "H"="Hole", "WV"="Warner Valley"))) 
@@ -281,6 +313,7 @@ N.firehistory <- N.firehistory + geom_boxplot() + theme_bw() + facet_grid(Horizo
 N.firehistory <- N.firehistory + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
 N.firehistory <- N.firehistory + scale_y_continuous(name="% Nitrogen") 
 N.firehistory <- N.firehistory + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire"))
+
 N.firehistory
 
 #save plot as a png file
@@ -288,9 +321,11 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 ```
 
 ```{r}
+df.noUB$SampleSev <- as.factor(df.noUB$SampleSev)
+
 # % Carbon by burn severity faceted by unit and horizon 
 C.burnsev <- ggplot(df.noUB, aes(SampleSev, cleanC, fill=SampleSev)) 
-C.burnsev <- C.burnsev + geom_boxplot() + theme_bw() + facet_grid(Horizon~unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "O" = "Organic", "Butte Lake" = "Butte Lake", "Hole" = "Hole", "Warner Valley" = "Warner Valley"))) 
+C.burnsev <- C.burnsev + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "O" = "Organic", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
 C.burnsev <- C.burnsev + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
 C.burnsev <- C.burnsev + scale_y_continuous(name="% Carbon") 
 C.burnsev <- C.burnsev + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
@@ -301,7 +336,7 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 
 # % Nitrogen by burn severity faceted by unit and horizon
 N.burnsev <- ggplot(df.noUB, aes(SampleSev, cleanN, fill=SampleSev)) 
-N.burnsev <- N.burnsev + geom_boxplot() + theme_bw() + facet_grid(Horizon~unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "O" = "Organic", "Butte Lake" = "Butte Lake", "Hole" = "Hole", "Warner Valley" = "Warner Valley"))) 
+N.burnsev <- N.burnsev + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "O" = "Organic", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
 N.burnsev <- N.burnsev + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
 N.burnsev <- N.burnsev + scale_y_continuous(name="% Nitrogen") 
 N.burnsev <- N.burnsev + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
@@ -316,113 +351,58 @@ ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figu
 
 ```{r}
 #visualize C/N data by treatment faceted by unit and horizon
-Cstock.firehistory.M <- ggplot(df.noUB, aes(Trt, Cstock, fill=Trt)) 
-Cstock.firehistory.M <- Cstock.firehistory.M + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
+Cstock.firehistory.M <- ggplot(df.noUB, aes(Trt, Cstock_gcm2*10, fill=Trt)) 
+Cstock.firehistory.M <- Cstock.firehistory.M + geom_boxplot() + theme_bw() + facet_wrap(~Unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
 Cstock.firehistory.M <- Cstock.firehistory.M + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
-Cstock.firehistory.M <- Cstock.firehistory.M + scale_y_continuous(name="Carbon Stock (mg C/cm^2 soil)") 
+Cstock.firehistory.M <- Cstock.firehistory.M + scale_y_continuous(name="Carbon Stock (Mg C/ha soil)") 
 Cstock.firehistory.M <- Cstock.firehistory.M + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
 Cstock.firehistory.M
 
-Cstock.firehistory.O <- ggplot(df.noUB[df.noUB$Horizon=="O", ], aes(Trt, CStock, fill=Trt)) 
-Cstock.firehistory.O <- Cstock.firehistory.O + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-Cstock.firehistory.O <- Cstock.firehistory.O + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
-Cstock.firehistory.O <- Cstock.firehistory.O + scale_y_continuous(name="Carbon Stock (mg C/cm^2 soil)") 
-Cstock.firehistory.O <- Cstock.firehistory.O + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
-Cstock.firehistory.O
+ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/CStock_byfirehistoryandunit.png", plot = Cstock.firehistory.M, width = 10, height = 8, units = "in", dpi = 300)
 
-Nstock.firehistory.M <- ggplot(df.noUB[df.noUB$Horizon=="M", ], aes(Trt, NStock, fill=Trt)) 
-Nstock.firehistory.M <- Nstock.firehistory.M + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-Nstock.firehistory.M <- Nstock.firehistory.M + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
-Nstock.firehistory.M <- Nstock.firehistory.M + scale_y_continuous(name="Nitrogen Stock (mg N/cm^2 soil)") 
-Nstock.firehistory.M <- Nstock.firehistory.M + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
-Nstock.firehistory.M
-
-Nstock.firehistory.O <- ggplot(df.noUB[df.noUB$Horizon=="O", ], aes(Trt, NStock, fill=Trt)) 
-Nstock.firehistory.O <- Nstock.firehistory.O + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-Nstock.firehistory.O <- Nstock.firehistory.O + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
-Nstock.firehistory.O <- Nstock.firehistory.O + scale_y_continuous(name="Nitrogen Stock (mg N/cm^2 soil)") 
-Nstock.firehistory.O <- Nstock.firehistory.O + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
-Nstock.firehistory.O
-
-ggplot(df.noUB, aes(Trt, CStock)) +geom_boxplot() + facet_grid(Horizon~unit)
-
-ggplot(df.noUB, aes(Trt, NStock)) +geom_boxplot() + facet_grid(Horizon~unit)
 ```
 
 ```{r}
 #C/N data by burn severity by unit and horizon 
-Cstock.burnsev.M <- ggplot(df.noUB[df.noUB$Horizon=="M", ], aes(SampleSev, CStock, fill=SampleSev)) 
-Cstock.burnsev.M <- Cstock.burnsev.M + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
+Cstock.burnsev.M <- ggplot(df.noUB, aes(SampleSev, Cstock_gcm2, fill=SampleSev)) 
+Cstock.burnsev.M <- Cstock.burnsev.M + geom_boxplot() + theme_bw() + facet_wrap(~Unit, scales = "free_y", labeller = as_labeller(c("M" = "Mineral", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
 Cstock.burnsev.M <- Cstock.burnsev.M + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
-Cstock.burnsev.M <- Cstock.burnsev.M + scale_y_continuous(name="Carbon Stock (mg C/cm^2 soil)") 
+Cstock.burnsev.M <- Cstock.burnsev.M + scale_y_continuous(name="Carbon Stock (Mg C/ha)") 
 Cstock.burnsev.M <- Cstock.burnsev.M + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
 Cstock.burnsev.M
 
-Cstock.burnsev.O <- ggplot(df.noUB[df.noUB$Horizon=="O", ], aes(SampleSev, CStock, fill=SampleSev)) 
-Cstock.burnsev.O <- Cstock.burnsev.O + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-Cstock.burnsev.O <- Cstock.burnsev.O + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
-Cstock.burnsev.O <- Cstock.burnsev.O + scale_y_continuous(name="Carbon Stock (mg C/cm^2 soil)") 
-Cstock.burnsev.O <- Cstock.burnsev.O + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
-Cstock.burnsev.O
-
-Nstock.burnsev.M <- ggplot(df.noUB[df.noUB$Horizon=="M", ], aes(SampleSev, NStock, fill=SampleSev)) 
-Nstock.burnsev.M <- Nstock.burnsev.M + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-Nstock.burnsev.M <- Nstock.burnsev.M + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
-Nstock.burnsev.M <- Nstock.burnsev.M + scale_y_continuous(name="Nitrogen Stock (mg N/cm^2 soil)") 
-Nstock.burnsev.M <- Nstock.burnsev.M + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
-Nstock.burnsev.M
-
-Nstock.burnsev.O <- ggplot(df.noUB[df.noUB$Horizon=="O", ], aes(SampleSev, NStock, fill=SampleSev)) 
-Nstock.burnsev.O <- Nstock.burnsev.O + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-Nstock.burnsev.O <- Nstock.burnsev.O + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
-Nstock.burnsev.O <- Nstock.burnsev.O + scale_y_continuous(name="Nitrogen Stock (mg N/cm^2 soil)") 
-Nstock.burnsev.O <- Nstock.burnsev.O + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
-Nstock.burnsev.O
-
-ggplot(df.noUB, aes(SampleSev, percN)) + geom_point() + theme_bw() + facet_grid(Horizon~unit)
+ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/CStock_byburnseverityandunit.png", plot = Cstock.burnsev.M, width = 10, height = 8, units = "in", dpi = 300)
 ```
 
 ### C:N ratio
 
 ```{r}
+df.noUB <- df.noUB %>%
+  mutate(Horizon=factor(Horizon, levels=c("O", "M")))
+
 #visualize C/N data by treatment faceted by unit and horizon
-CN.firehistory.M <- ggplot(df.noUB[CN.noUB$Horizon=="M", ], aes(Trt, CNratio, fill=Trt)) 
-CN.firehistory.M <- CN.firehistory.M + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-CN.firehistory.M <- CN.firehistory.M + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
-CN.firehistory.M <- CN.firehistory.M + scale_y_continuous(name="C:N ratio") 
-CN.firehistory.M <- CN.firehistory.M + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
-CN.firehistory.M
+CN.firehistory <- ggplot(df.noUB, aes(Trt, C_N, fill=Trt)) 
+CN.firehistory <- CN.firehistory + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("O"="Organic", "M" = "Mineral", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
+CN.firehistory <- CN.firehistory + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
+CN.firehistory <- CN.firehistory + scale_y_continuous(name="C:N ratio") 
+CN.firehistory <- CN.firehistory + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
+CN.firehistory
 
-CN.firehistory.O <- ggplot(df.noUB[df.noUB$Horizon=="O", ], aes(Trt, CNratio, fill=Trt)) 
-CN.firehistory.O <- CN.firehistory.O + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-CN.firehistory.O <- CN.firehistory.O + scale_fill_manual(name="Fire History", values=c('#0097d3','#ffbb22'), labels = c("Less Fire", "More Fire"))
-CN.firehistory.O <- CN.firehistory.O + scale_y_continuous(name="C:N ratio") 
-CN.firehistory.O <- CN.firehistory.O + scale_x_discrete(name="Fire History", labels=c("Less Fire", "More Fire")) 
-CN.firehistory.O
-
-ggplot(df.noUB, aes(Trt, CNratio)) +geom_boxplot() + facet_grid(Horizon~unit)
-
-ggplot(df.noUB, aes(Trt, CNratio)) +geom_boxplot() + facet_grid(Horizon~unit)
+ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/CNratio_byfirehistoryandunit.png", plot = CN.firehistory, width = 10, height = 8, units = "in", dpi = 300)
 ```
 
 ```{r}
+df.noUB$SampleSev <- as.factor(df.noUB$SampleSev)
+
 #C/N data by burn severity by unit and horizon 
-CN.burnsev.M <- ggplot(df.noUB[df.noUB$Horizon=="M", ], aes(SampleSev, CNratio, fill=SampleSev)) 
-CN.burnsev.M <- CN.burnsev.M + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-CN.burnsev.M <- CN.burnsev.M + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
-CN.burnsev.M <- CN.burnsev.M + scale_y_continuous(name="C:N ratio") 
-CN.burnsev.M <- CN.burnsev.M + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
-CN.burnsev.M
+CN.burnsev <- ggplot(df.noUB, aes(SampleSev, C_N, fill=SampleSev)) 
+CN.burnsev <- CN.burnsev + geom_boxplot() + theme_bw() + facet_grid(Horizon~Unit, scales = "free_y", labeller = as_labeller(c("O"="Organic", "M" = "Mineral", "BL" = "Butte Lake", "H" = "Hole", "WV" = "Warner Valley"))) 
+CN.burnsev <- CN.burnsev + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
+CN.burnsev <- CN.burnsev + scale_y_continuous(name="C:N ratio") 
+CN.burnsev <- CN.burnsev + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
+CN.burnsev
 
-CN.burnsev.O <- ggplot(df.noUB[df.noUB$Horizon=="O", ], aes(SampleSev, CNratio, fill=SampleSev)) 
-CN.burnsev.O <- CN.burnsev.O + geom_boxplot() + theme_bw() + facet_wrap(~unit) 
-CN.burnsev.O <- CN.burnsev.O + scale_fill_manual(name="Burn Severity", values=c('#f5db4c', '#f98e09', '#bc3754', '#57106e'),labels = c("Unburned", "Low", "Moderate", "Severe")) 
-CN.burnsev.O <- CN.burnsev.O + scale_y_continuous(name="C:N ratio") 
-CN.burnsev.O <- CN.burnsev.O + scale_x_discrete(name="Burn Severity", labels=c("Unburned", "Low", "Moderate", "Severe"))
-CN.burnsev.O
-
-
-ggplot(df.noUB, aes(SampleSev, CNratio)) + geom_point() + theme_bw() + facet_grid(Horizon~unit)
+ggsave("C:/Users/iemus/Documents/UW_MS_LAVOSoils/MSWhitman/LAVO_FireHistory/Figures/CN/CNratio_byburnseverityandunit.png", plot = CN.burnsev, width = 10, height = 8, units = "in", dpi = 300)
 ```
 
 ## Statistics
